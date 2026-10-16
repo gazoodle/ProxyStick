@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# The dev loop (AGENTS.md): the fake git host and a ProxyStick server, one console. tools/dev <folder>
+exec "$(dirname "$0")/../.venv/bin/python" "$(dirname "$0")/dev.py" "$@"

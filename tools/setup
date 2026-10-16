@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Make .venv with ProxyStick, its dev tools and ESPHome; fake-git-host from beside this checkout.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+fgh="${FAKE_GIT_HOST:-../fake-git-host}"
+[ -d "$fgh" ] || { echo "no $fgh: clone fake-git-host beside this repo, or set FAKE_GIT_HOST" >&2; exit 1; }
+[ -d .venv ] || python3 -m venv .venv
+.venv/bin/pip install -q --upgrade pip
+# compat: a plain .pth path, which pyright can follow (setuptools' default import hook it cannot).
+.venv/bin/pip install -q --config-settings editable_mode=compat -e '.[dev]' -e "$fgh"
+echo "ready: .venv"

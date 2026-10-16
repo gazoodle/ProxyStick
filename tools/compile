@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Compile example/proxystick.yaml against this working tree's component: the check before flashing.
+# Builds outside the repo (default ~/.cache/proxystick-build, kept so rebuilds are incremental), because
+# ESP-IDF's CMake reads the git HEAD of the folders it builds in, and fails on a repo with no commits.
+set -euo pipefail
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+work="${PROXYSTICK_BUILD:-$HOME/.cache/proxystick-build}"
+mkdir -p "$work"
+sed "s#^  - source: github://gazoodle/ProxyStick#  - source:\n      type: local\n      path: $repo/components#" \
+    "$repo/example/proxystick.yaml" > "$work/proxystick.yaml"
+# Invented values: the build needs them to exist, not to work.
+cat > "$work/secrets.yaml" <<'SECRETS'
+wifi_ssid: example
+wifi_password: example-password
+api_key: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+proxystick_token: example-token
+SECRETS
+cd "$work"
+exec "$repo/.venv/bin/esphome" compile proxystick.yaml

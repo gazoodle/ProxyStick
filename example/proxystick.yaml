@@ -1,0 +1,107 @@
+# A ProxyStick on an M5Stack AtomS3, with every option and diagnostic. Only `proxy_stick:` and its
+# `endpoint` are required; drop the rest to taste.
+esphome:
+  name: proxystick
+  friendly_name: ProxyStick
+
+esp32:
+  board: m5stack-atoms3
+  framework:
+    type: esp-idf
+  flash_size: 8MB
+
+external_components:
+  - source: github://gazoodle/ProxyStick
+    components: [proxy_stick]
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # The stick needs low latency more than power savings: it is powered by the host's USB port.
+  power_save_mode: none
+
+logger:
+  baud_rate: 0  # The USB port is the drive, not a serial console.
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+
+proxy_stick:
+  id: proxystick
+  endpoint: http://192.0.2.10:8766  # the address `proxystick serve` printed
+  token: !secret proxystick_token  # optional; the same token the server has
+  read_block_size: 65536           # optional; 512 to 65536 bytes per range read
+  manufacturer: ProxyStick         # optional; what the host is told
+  product: ProxyStick
+  update_interval: 5s              # how often the sensors below are published
+  # usb_trace: true                # record every USB command in flash, for diagnosing a host
+
+switch:
+  - platform: proxy_stick
+    usb:
+      name: USB drive
+    # For frames that power-cycle the stick at every insert. These three (with the button and binary sensor
+    # below) start disabled in Home Assistant; arming, then pressing, burns an irreversible eFuse at restart.
+    usb_phy_fuse_armed:
+      name: USB PHY fuse armed
+
+button:
+  - platform: proxy_stick
+    refresh:
+      name: Refresh USB drive
+    clear_statistics:
+      name: Clear drive statistics
+    dump_usb_trace:
+      name: Dump USB trace
+    burn_usb_phy_fuse:
+      name: Burn USB PHY fuse on next boot
+
+binary_sensor:
+  - platform: proxy_stick
+    upstream:
+      name: Image service
+    usb_host:
+      name: USB host configured
+    usb_otg_at_power_on:
+      name: USB drive-only at power-on
+
+sensor:
+  - platform: proxy_stick
+    bytes_served:
+      name: Bytes served this session
+    total_bytes_served:
+      name: Total bytes served
+    read_throughput:
+      name: USB read throughput
+    max_read_throughput:
+      name: Maximum USB read throughput
+    usb_scsi_commands:
+      name: USB SCSI commands
+    network_bytes_fetched:
+      name: Network bytes fetched
+    cache_hit_bytes:
+      name: Cache hit bytes
+    http_requests:
+      name: HTTP range requests
+    http_failures:
+      name: HTTP range failures
+    average_http_time:
+      name: Average HTTP range time
+    last_http_time:
+      name: Last HTTP range time
+    average_first_byte_time:
+      name: Average HTTP first byte time
+    average_http_chunk:
+      name: Average HTTP data chunk
+    prefetch_hits:
+      name: Prefetch hits
+    prefetch_waits:
+      name: Prefetch waits
+    prefetch_discards:
+      name: Prefetch discards
+    prefetch_failures:
+      name: Prefetch failures

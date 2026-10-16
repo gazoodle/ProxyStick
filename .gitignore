@@ -1,0 +1,8 @@
+.tokensave
+.venv/
+__pycache__/
+*.egg-info/
+.esphome/
+.pytest_cache/
+.ruff_cache/
+tools/dev-device*.yaml
