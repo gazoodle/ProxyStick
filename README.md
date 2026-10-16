@@ -41,12 +41,16 @@ speaks it will work.
 ## Hardware
 
 Any ESP32-S3 board with the S3's native USB brought out to its connector. ESP32 variants
-without native USB (the original ESP32, the C3) can't do this.
+without a USB-OTG controller (the original ESP32, the C3, C6 and H2) can't do this. Boards
+that plug straight into the frame (a USB-A plug) need no cable.
 
 | Board | Status |
 |---|---|
-| M5Stack AtomS3 | Tested |
-| M5Stack AtomS3U | Tested (USB-A plug, so it goes straight into the frame) |
+| [M5Stack AtomS3](https://docs.m5stack.com/en/core/AtomS3) | Tested |
+| [M5Stack AtomS3U](https://docs.m5stack.com/en/core/AtomS3U) | Tested (USB-A plug, so it goes straight into the frame) |
+| [M5Stack AtomS3R](https://docs.m5stack.com/en/core/AtomS3R) | Expected to work; not yet tested (8 MB PSRAM, room for a much larger read-ahead) |
+| [LilyGO T-Dongle-S3](https://wiki.lilygo.cc/products/t-dongle-series/t-dongle-s3/) | Candidate, not yet tested (USB-A plug, 8 MB PSRAM, TF slot) |
+| [Waveshare ESP32-S3-GEEK](https://docs.waveshare.com/ESP32-S3-GEEK) | Candidate, not yet tested (USB-A plug, 2 MB PSRAM, TF slot) |
 
 ## Quick start
 
