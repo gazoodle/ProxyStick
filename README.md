@@ -12,9 +12,8 @@ The first use is photo frames. Many good frames have a USB port but no WiFi, or 
 through a vendor's cloud. With ProxyStick in the port, the frame shows a curated photo
 library from a folder on your own server, and you never take the stick out to update it.
 
-> **Status:** early. A prototype of the device code has shown served photos on a real frame.
-> This version is that prototype reworked: the server is tested, and the device code builds
-> but has not yet run on hardware. Expect changes, including to the wire protocol, until 1.0.
+> **Status:** early. Sticks built from this repository serve photos to two different frames.
+> Expect changes, including to the wire protocol, until 1.0.
 
 ## How it works
 
@@ -47,7 +46,7 @@ without native USB (the original ESP32, the C3) can't do this.
 | Board | Status |
 |---|---|
 | M5Stack AtomS3 | Tested |
-| M5Stack AtomS3U | Expected to work (USB-A plug, so it goes straight into the frame) |
+| M5Stack AtomS3U | Tested (USB-A plug, so it goes straight into the frame) |
 
 ## Quick start
 
@@ -113,6 +112,50 @@ or add `stick.routes()` to an aiohttp app of your own.
 - Read-only. 512-byte sectors, FAT32.
 - Throughput is WiFi-bound, in the hundreds of KB/s: fine for photos, slow for video.
 - The stick needs the server while it is in use. Without the server there is no drive.
+
+## Frames that keep restarting the stick
+
+Some frames are quick, almost twitchy, about USB. When the stick goes in they show "storage
+connected", then "disconnected", over and over, and never show a picture. These frames treat
+a USB device that changes or disappears as faulty and cut its power to reset it.
+
+The cause is in the ESP32-S3 itself. For its first fraction of a second after power-on, before
+any firmware runs, the chip presents its own built-in USB device: a serial port and debugger
+(USB-Serial/JTAG). ProxyStick then takes the USB pins over to present the drive. A patient
+host, such as a computer or most frames, simply sees the drive arrive. A rapid frame has
+already noticed the first device, sees it disappear, power-cycles the stick, and the whole
+thing repeats.
+
+The fix is to tell the chip, permanently, to give its USB pins to the drive from power-on, so
+a host only ever meets the drive. That's an eFuse, a one-time switch inside the chip, and the
+stick can set it itself from Home Assistant:
+
+1. In the stick's device page, enable the three hidden entities: **USB PHY fuse armed**,
+   **Burn USB PHY fuse on next boot** and **USB drive-only at power-on**. They come from
+   [example/proxystick.yaml](example/proxystick.yaml).
+2. Turn on **USB PHY fuse armed**.
+3. Press **Burn USB PHY fuse on next boot**.
+4. Restart the stick. **USB drive-only at power-on** turns on, and from the next time it's
+   plugged in the frame sees only the drive.
+
+Only do this for a frame that needs it; most don't. What it costs you, on that stick, for good:
+
+- **It can't be undone.** The switch is burnt into the chip.
+- **No built-in serial port or debugger at power-on.** You can't watch the chip's start-up
+  messages over USB or attach a debugger from reset. ESPHome's own logs come over WiFi as
+  usual, so day to day you won't notice.
+- **Reflashing over USB still works,** through a different route: hold the reset button for
+  about 2 s to put it into download mode. Some early ESP32-S3 chips have that route disabled
+  at the factory; the stick checks for this and refuses to burn the fuse on them, because
+  they could then never be reflashed over USB. A USB-serial adapter on the chip's UART pins
+  remains as a last resort.
+- **Nothing else changes.** Over-the-air updates work as before, and the planned HID support
+  uses the same USB route as the drive, so it isn't affected.
+
+The arm switch is always off after a restart, and turning it off cancels a burn that hasn't
+happened yet. To see what a frame is doing before deciding, set `usb_trace: true` under
+`proxy_stick:` and press **Dump USB trace**: the stick records every USB event and command,
+across power cycles, for its last 16 boots.
 
 ## Security
 

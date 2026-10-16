@@ -45,8 +45,8 @@ reflashed over USB. Irreversible, per board.
 
 **Verified:** the burnt AtomS3U shows photos on the strict frame at once, and after the burn
 the ROM's USB-OTG download mode (hold reset 2 s) still talks to esptool (stub flasher ran), so it
-can be reflashed over USB. It enumerates with the MAC in lower case as its serial. Still to check:
-the second frame with the burnt stick. (`espefuse` fails in ESPHome's venv on a `bitstring`
+can be reflashed over USB. It enumerates with the MAC in lower case as its serial. The second
+frame works with the burnt stick too, so the fix suits both. (`espefuse` fails in ESPHome's venv on a `bitstring`
 version clash; the firmware's config dump reports the fuses instead.)
 
 **Keep in mind:**

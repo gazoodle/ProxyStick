@@ -20,6 +20,13 @@ Planned, not started. Newest first within each section. Don't start an item unle
 
 ## Device
 
+- **Bug: corrupt pictures on the strict frame** (seen 2026-10-16, with the burnt AtomS3U, the
+  first time it mounted there). The same burnt stick shows the same image correctly on the
+  second frame, so it is how this frame reads that differs. Not investigated. To capture
+  first: whether the same pictures are corrupt each time, the same files on the Mac, the
+  drive's HTTP failure and prefetch counters, and a USB trace (`READ 10 FAILED`, read
+  ranges). Suspects: the read-ahead cache serving a stale or wrong block, a short HTTP read
+  accepted, or this frame reading in a pattern the Mac and the second frame never did.
 - **Change images without disconnecting USB.** Refresh, the switch and the front button use
   `tud_disconnect`/`tud_connect`, which the strict frame punishes as a disappearing device.
   Stay attached: report "no medium", then "medium changed" (UNIT ATTENTION), as a card reader
