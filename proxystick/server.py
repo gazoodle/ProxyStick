@@ -32,7 +32,7 @@ from . import fat
 logger = logging.getLogger(__name__)
 
 PROTOCOL = 0
-PORT = 8766
+PORT = 8767
 PREFIX = "/proxystick"
 IMAGE = re.compile(r"sha256-[0-9a-f]{64}\.img")
 NO_STORE = {"Cache-Control": "no-store"}

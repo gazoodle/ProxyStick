@@ -159,20 +159,28 @@ bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uin
     response.track_data = true;
     esp_http_client_set_user_data(image_client, &response);
     esp_http_client_set_header(image_client, "Range", range);
+    const uint32_t statistics_epoch = stats.epoch.load(std::memory_order_relaxed);
     response.started_us = micros();
     const esp_err_t error = esp_http_client_perform(image_client);
     const uint32_t elapsed = micros() - response.started_us;
-    stats.http_request_count.fetch_add(1, std::memory_order_relaxed);
-    stats.http_request_time_us.fetch_add(elapsed, std::memory_order_relaxed);
-    stats.http_first_byte_time_us.fetch_add(response.first_data_us, std::memory_order_relaxed);
-    stats.http_data_event_count.fetch_add(response.data_events, std::memory_order_relaxed);
-    stats.http_data_event_bytes.fetch_add(response.data_bytes, std::memory_order_relaxed);
-    stats.last_http_request_us.store(elapsed, std::memory_order_relaxed);
-    if (error == ESP_OK && esp_http_client_get_status_code(image_client) == 206 && response.received == size) {
-      stats.network_fetched_bytes.fetch_add(size, std::memory_order_relaxed);
-      return true;
+    const bool success = error == ESP_OK && esp_http_client_get_status_code(image_client) == 206 &&
+                         response.received == size;
+    if (stats.epoch.load(std::memory_order_relaxed) == statistics_epoch) {
+      stats.http_request_count.fetch_add(1, std::memory_order_relaxed);
+      stats.http_request_time_us.fetch_add(elapsed, std::memory_order_relaxed);
+      stats.http_first_byte_time_us.fetch_add(response.first_data_us, std::memory_order_relaxed);
+      stats.http_data_event_count.fetch_add(response.data_events, std::memory_order_relaxed);
+      stats.http_data_event_bytes.fetch_add(response.data_bytes, std::memory_order_relaxed);
+      stats.last_http_request_us.store(elapsed, std::memory_order_relaxed);
+      if (success) {
+        stats.network_fetched_bytes.fetch_add(size, std::memory_order_relaxed);
+        stats.http_success_time_us.fetch_add(elapsed, std::memory_order_relaxed);
+      } else {
+        stats.http_request_failures.fetch_add(1, std::memory_order_relaxed);
+      }
     }
-    stats.http_request_failures.fetch_add(1, std::memory_order_relaxed);
+    if (success)
+      return true;
     ESP_LOGW(TAG, "Range read at %" PRIu64 " failed: %s, status %d, %u of %" PRIu32 " bytes", start,
              esp_err_to_name(error), esp_http_client_get_status_code(image_client),
              static_cast<unsigned>(response.received), size);

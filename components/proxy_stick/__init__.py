@@ -60,7 +60,7 @@ async def to_code(config):
     include_builtin_idf_component("esp_http_client")
     add_idf_sdkconfig_option("CONFIG_TINYUSB_MSC_ENABLED", True)
     # A transport buffer, not a filesystem sector size: sectors stay 512 B for every host.
-    add_idf_sdkconfig_option("CONFIG_TINYUSB_MSC_BUFSIZE", 4096)
+    add_idf_sdkconfig_option("CONFIG_TINYUSB_MSC_BUFSIZE", 8192)
     # Measured on the prototype: range reads of 64 KiB were bound by lwIP's ~5.7 KiB default window.
     add_idf_sdkconfig_option("CONFIG_LWIP_TCP_WND_DEFAULT", 32768)
     add_idf_sdkconfig_option("CONFIG_LWIP_TCP_RECVMBOX_SIZE", 32)

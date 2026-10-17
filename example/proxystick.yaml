@@ -32,13 +32,13 @@ ota:
 
 proxy_stick:
   id: proxystick
-  endpoint: http://192.0.2.10:8766  # the address `proxystick serve` printed
+  endpoint: http://192.0.2.10:8767  # the address `proxystick serve` printed
   token: !secret proxystick_token  # optional; the same token the server has
   read_block_size: 65536           # optional; 512 to 65536 bytes per range read
   manufacturer: ProxyStick         # optional; what the host is told
   product: ProxyStick
   update_interval: 5s              # how often the sensors below are published
-  # usb_trace: true                # record every USB command in flash, for diagnosing a host
+  usb_trace: false                 # set true temporarily to record USB negotiation across power loss
 
 switch:
   - platform: proxy_stick
@@ -57,6 +57,8 @@ button:
       name: Clear drive statistics
     dump_usb_trace:
       name: Dump USB trace
+    dump_hot_blocks:
+      name: Dump hot blocks
     burn_usb_phy_fuse:
       name: Burn USB PHY fuse on next boot
 
@@ -79,6 +81,14 @@ sensor:
       name: USB read throughput
     max_read_throughput:
       name: Maximum USB read throughput
+    session_read_throughput:
+      name: Session USB read throughput
+    http_fetch_throughput:
+      name: HTTP fetch throughput
+    source_read_throughput:
+      name: Block source throughput
+    usb_transport_throughput:
+      name: USB transport throughput
     usb_scsi_commands:
       name: USB SCSI commands
     network_bytes_fetched:
@@ -101,6 +111,8 @@ sensor:
       name: Prefetch hits
     prefetch_waits:
       name: Prefetch waits
+    average_prefetch_wait_time:
+      name: Average prefetch wait time
     prefetch_discards:
       name: Prefetch discards
     prefetch_failures:

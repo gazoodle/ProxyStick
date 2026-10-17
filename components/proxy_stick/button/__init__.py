@@ -23,6 +23,10 @@ BUTTONS = {
         "dump_trace",
         button.button_schema(ActionButton, icon="mdi:text-box-search-outline", entity_category=ENTITY_CATEGORY_DIAGNOSTIC),
     ),
+    "dump_hot_blocks": (
+        "dump_hot_blocks",
+        button.button_schema(ActionButton, icon="mdi:chart-bar", entity_category=ENTITY_CATEGORY_DIAGNOSTIC),
+    ),
     # Schedules the irreversible USB_PHY_SEL burn for the next boot; needs the arming switch on. Disabled in
     # Home Assistant until someone enables it.
     "burn_usb_phy_fuse": (

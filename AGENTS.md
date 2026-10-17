@@ -15,7 +15,7 @@ curated photo library for a photo frame with no WiFi. HID support is planned, no
 - Tests: `.venv/bin/pytest -q`
 - Lint/format: `.venv/bin/ruff check .` / `.venv/bin/ruff format .`
 - Types: `.venv/bin/pyright`
-- Component build check: `tools/compile` (the example config against this working tree)
+- Component builds are run by the owner on the live HA/ESPHome box; agents do not run `tools/compile`.
 - Dev loop: `tools/dev <folder>` (see below)
 
 **Versioning:** semantic, `MAJOR.MINOR.BUILD`, held once in `pyproject.toml`; the component

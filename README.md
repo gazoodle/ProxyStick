@@ -64,7 +64,7 @@ proxystick serve ~/FramePhotos
 This prints the address the stick should use, builds the image in the background and opens a
 console: `REFRESH` (rebuild from the folder and publish; if nothing changed, the sticks reload
 anyway), `STATUS`, `HELP` and `QUIT`. Published images and the revision live in
-`~/.cache/proxystick` (`--state` to change it); `--port` changes the port (default 8766).
+`~/.cache/proxystick` (`--state` to change it); `--port` changes the port (default 8767).
 
 The drive holds the folder's files, not its subfolders or hidden files, in name order. Frames
 usually play files in name order too, so name them in the order you want them shown.
@@ -84,7 +84,7 @@ external_components:
     components: [proxy_stick]
 
 proxy_stick:
-  endpoint: http://192.0.2.10:8766  # the address `proxystick serve` printed
+  endpoint: http://192.0.2.10:8767  # the address `proxystick serve` printed
 ```
 
 Flash it once over USB, then plug the stick into the frame. Later updates go over the air.
@@ -102,7 +102,7 @@ console on any always-on machine, or embed the core in your own service:
 ```python
 from proxystick import ProxyStick
 
-stick = ProxyStick(folder, state_dir, token=token).start(port=8766)  # builds in the background
+stick = ProxyStick(folder, state_dir, token=token).start(port=8767)  # builds in the background
 stick.refresh()  # after changing the folder; returns what happened
 stick.health()  # status, revision, files, connected sticks, last error
 stick.stop()
@@ -157,9 +157,10 @@ Only do this for a frame that needs it; most don't. What it costs you, on that s
   uses the same USB route as the drive, so it isn't affected.
 
 The arm switch is always off after a restart, and turning it off cancels a burn that hasn't
-happened yet. To see what a frame is doing before deciding, set `usb_trace: true` under
-`proxy_stick:` and press **Dump USB trace**: the stick records every USB event and command,
-across power cycles, for its last 16 boots.
+happened yet. USB tracing is normally off: it runs a task and records into NVS, so leave
+`usb_trace: false` during performance work and ordinary use. To diagnose USB negotiation or a host
+that cuts power, temporarily set `usb_trace: true` under `proxy_stick:` and press **Dump USB trace**:
+the stick records every USB event and command across power cycles for its last 16 boots.
 
 ## Security
 

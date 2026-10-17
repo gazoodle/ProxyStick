@@ -1,8 +1,10 @@
 # ProxyStick performance work
 
 Measurements from the prototype this repository grew from (October 2026), then this version's.
-`KB/s` follows the decimal-style figures reported by `dd`; transferred byte counts and elapsed
-times are exact.
+All prototype throughput benchmarks used `dd` against the block device, not files through the
+mounted filesystem. `KB/s` follows `dd`'s decimal-style figures; transferred byte counts and
+elapsed times are exact. Frame captures below are workload diagnostics, not filesystem throughput
+benchmarks.
 
 ## Performance history (prototype, AtomS3, no PSRAM)
 
@@ -22,7 +24,7 @@ times are exact.
 | Verified network range size | Compared frame network bytes with request count | 3,342,336 ÷ 51 = exactly **65,536 B/request** | — | The frame test was using the intended 64 KiB cache blocks; the front-button refresh had not reverted it to 512 bytes. |
 | Peak-rate diagnostics | Added `Maximum USB read throughput` alongside instantaneous throughput | Captured the frame's **237,331 B/s** peak | — | The instantaneous sensor normally returns to zero before HA is inspected; the maximum sensor preserves the useful session result. |
 
-## Controlled sequential progression
+## Controlled sequential `dd` progression
 
 | Implementation | Throughput | 8 MiB time | Relative speed |
 |---|---:|---:|---:|
@@ -33,9 +35,10 @@ times are exact.
 
 ## Position at the end of the prototype
 
-The best verified sequential throughput on the non-PSRAM AtomS3 is **646 KB/s**, nearly six
-times the original implementation. This is enough for the photo-frame use case, but remains far
-below the physical capabilities of USB, Wi-Fi and the server.
+The best verified sequential raw-block throughput on the non-PSRAM AtomS3 is **646 KB/s**, nearly
+six times the original implementation. There is no prototype filesystem-throughput baseline yet.
+The raw result is enough to show headroom, but remains far below the physical capabilities of USB,
+Wi-Fi and the server.
 
 The remaining performance problem is principally the ESP HTTP receive path:
 
@@ -59,10 +62,12 @@ The transport (HTTP client, lwIP settings, block cache, double-buffer prefetch) 
 from the prototype unchanged; discovery and the event stream moved off the main loop. Not yet
 benchmarked. Readings from ordinary frame and Mac use, not a controlled test:
 
-- Maximum USB read throughput **124–129 KB/s**. **Not comparable with the prototype's peaks:**
-  this version's throughput sensors average over `update_interval` (5 s by default), the
-  prototype's over 1 s, so short bursts read lower. Rerun the controlled 8 MiB test, and set
-  `update_interval: 1s` when comparing peaks.
+- Maximum USB read throughput **124–129 KB/s**. These were captured before command-level timing
+  and are not comparable with the prototype's peaks: the sensor averaged bytes over its ESPHome
+  `update_interval`. The current sensor measures each completed successful SCSI `READ(10)` from
+  its first callback through USB data and status completion; publishing frequency no longer
+  changes the latest or maximum value. The session sensor measures all successful read bytes from
+  the session's first read through its latest completed read, including inter-command gaps.
 - HTTP range time 62–77 ms average for 64 KiB; first byte 26–35 ms; data chunks 11.6–16 KB.
 - Prefetch: 8 hits against 21–22 discards and 24–26 waits on those (non-sequential) reads.
 - Free heap ~54–58 KB, against the prototype's ~79.7 KB: the event-stream task (8 KiB stack)

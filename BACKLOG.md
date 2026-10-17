@@ -32,12 +32,18 @@ Planned, not started. Newest first within each section. Don't start an item unle
 
 ## Device
 
+- **Disable detailed diagnostics by default** (owner decision, 2026-10-17). Keep the latest,
+  maximum and session USB read-rate sensors visible. Mark the lower-level HTTP, cache, prefetch
+  and similar tuning sensors `disabled_by_default` in ESPHome: they are valuable during development
+  and field diagnosis, but should not clutter an ordinary device. Do not remove them.
 - **Performance: measure and raise throughput** (asked 2026-10-17). History and figures are in
   `docs/PERFORMANCE.md`; the experiment order and 45-cell hardware/host/library matrix are in
-  `docs/PERFORMANCE_PLAN.md`. The prototype went from ~110 KB/s to **646 KB/s** (8 MiB sequential,
-  double-buffer prefetch); a frame session peaked at 237,331 B/s and fetched 2.09× what it read.
-  This version is not yet benchmarked. To do: rerun the controlled 8 MiB test (with
-  `update_interval: 1s` when comparing peaks), and repeat it after every transport change.
+  `docs/PERFORMANCE_PLAN.md`. The prototype went from ~110 KB/s to **646 KB/s** in an 8 MiB
+  sequential `dd` block test with double-buffer prefetch; no filesystem-throughput baseline exists
+  yet. A frame session peaked at 237,331 B/s and fetched 2.09× what it read.
+  This version is not yet benchmarked. To do: rerun the controlled 8 MiB test and repeat it after
+  every transport change. Throughput is measured per completed SCSI read command; verify that 1 s
+  and 5 s ESPHome publishing intervals preserve the same peak.
   Next experiments: a PSRAM cache of hot ranges (partition table, FATs, directories) on the
   AtomS3R beside the sequential double buffer; read-ahead suited to frames' metadata-heavy
   reads; more than one request in flight; and serving from an SD card (below).
@@ -99,8 +105,11 @@ Planned, not started. Newest first within each section. Don't start an item unle
   Stay attached: report "no medium", then "medium changed" (UNIT ATTENTION), as a card reader
   does. Test on both frames.
 - **After the USB PHY fuse is burnt, the arm switch and burn button still show** (asked
-  2026-10-16, after the S3U burn). ESPHome cannot remove entities at runtime. Proposal: the arm
-  switch refuses to turn on once burnt (log why), and the README says to disable both again.
+  2026-10-16, after the S3U burn). Both controls are already `disabled_by_default`, but that is a
+  static discovery hint: ESPHome cannot disable or remove them conditionally at runtime, and Home
+  Assistant remembers if the user enabled them. The burn button already refuses once burnt. Make
+  the arm switch refuse and publish itself off too (logging why), and document that the two controls
+  can be disabled again. Keep the drive-only binary sensor: it remains useful as fuse status.
 - **Split the USB PHY fuse code out of `proxy_stick.cpp`** (440 lines, in the warning band).
 - **USB serial number from the chip's MAC**, not TinyUSB's default `123456`, so two sticks on
   one host (or a frame that remembers devices) are told apart.

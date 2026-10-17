@@ -12,11 +12,17 @@ unreachable payload rate. Espressif reports about 0.925 MB/s from an ESP32-S3 MS
 
 - at least 0.90 MB/s from a RAM-backed USB-only benchmark;
 - at least 1.20 MB/s from the network-only path, leaving margin for jitter;
-- at least 0.85 MB/s sustained end to end, with 0.90 MB/s as the stretch target;
+- at least 0.85 MB/s in the raw end-to-end block test, with 0.90 MB/s as the stretch target;
 - no regression in mounting, first-photo time, image correctness or recovery.
 
-The sequential number is not enough. A frame's metadata-heavy reads must not fetch substantially
-more data than the host consumes or repeatedly empty the read-ahead buffer.
+Raw sequential block speed is a diagnostic ceiling, not the product result. The primary result is
+filesystem performance: mounting, enumeration and reading real files through the host filesystem.
+A frame's metadata-heavy reads must not fetch substantially more data than the host consumes or
+repeatedly empty the read-ahead buffer.
+
+The prototype's headline throughput figures—about 110, 288, 442 and 646 KB/s—were all sequential
+`dd` block-device tests. They provide raw-block history only; the first filesystem matrix run in
+this plan establishes the application-visible baseline.
 
 ## Candidate path
 
@@ -74,11 +80,11 @@ and SD bus mode. Keep the same power supply, server, access point, channel, dist
 Record the host model and OS version outside the public repository if either is private. Test both
 frames after every USB scheduling or media-change alteration.
 
-## Primary matrix
+## Filesystem workload matrix
 
 Every cell is one device/host/library combination: **3 device paths × 3 hosts × 5 libraries = 45
-cells**. Record each cell as `result; usable time; sustained rate; fetched/served`, using `—` where
-a measurement does not apply.
+cells**. Record each cell as `result; usable time; filesystem rate; fetched/served`, using `—` where
+a measurement does not apply. Do not put raw block-read results in these tables.
 
 ### S3 results
 
@@ -117,8 +123,8 @@ Complete this only from the cell results; do not substitute isolated USB or netw
 | Result | `S3` | `S3+PSRAM` | `S3+SD` |
 |---|---:|---:|---:|
 | Cells passed / 15 | | | |
-| Median Mac sequential rate | | | |
-| Worst Mac sequential rate | | | |
+| Median Mac filesystem read rate | | | |
+| Worst Mac filesystem read rate | | | |
 | Median strict-frame usable time | | | |
 | Median tolerant-frame usable time | | | |
 | Worst fetched/served amplification | | | |
@@ -134,6 +140,30 @@ Run one cold screening pass over all 45 cells. Repeat a cell three times when it
 more than 10%, or is used to decide whether a candidate change survives. This avoids hundreds of
 routine runs while still repeating every consequential result.
 
+## Mac filesystem baselines
+
+Keep two mounted-filesystem workloads beside the raw-device `dd` result:
+
+1. **Whole tree:** time `tar -cf /dev/null -C /Volumes/PROXYSTICK .` three times. This forces
+   directory traversal and file reads through the mounted filesystem without measuring destination
+   writes.
+2. **Frame shuffle:** enumerate the image files once, shuffle them with a recorded seed, then open
+   and read each selected file to EOF in 64 KiB chunks. Record first-byte and complete-file time for
+   each image as well as the whole-run rate.
+
+Clear drive statistics immediately before each run. Compare the known file bytes with the increase
+in **Session bytes served**: repeated macOS reads can be satisfied from the host page cache. A run
+whose device byte count does not rise by approximately the bytes read is a host-cache result, not a
+ProxyStick filesystem result. Record it separately. For comparable cold runs, unmount and remount
+the volume before each repetition, while still using the device counter to prove that reads reached
+the stick.
+
+The eventual `tools/frame-bench` CLI should implement only the deterministic shuffle workload,
+accepting a mount path, image count and seed. It should report host timings and bytes; the device
+sensors remain the authority for how those bytes were supplied. Start with scan-once followed by
+whole-file reads. Add header probes, rescans or dwell time only when a real frame trace shows that
+behaviour. This makes it a repeatable pressure test, not a claim to emulate either physical frame.
+
 ## Procedure for each cell
 
 1. Publish the named library and record its generation and FAT image size.
@@ -145,13 +175,38 @@ routine runs while still repeating every consequential result.
 5. Exercise the workload:
    - frames: allow the initial scan, then advance through up to ten photos or the whole library,
      whichever is smaller;
-   - Mac: list the complete root directory, then perform the controlled sequential 8 MiB read.
+   - Mac: list the complete root directory, then read whole photo files through the mounted
+     filesystem until at least 64 MiB has been read, or the whole library when it is smaller. Use
+     the same deterministic filename order in every run.
 6. Confirm displayed/read data against the published generation and inspect for corrupt images,
    USB resets, read failures and watchdog warnings.
 7. Capture the counters below before removing power.
 
-Do not compare the five-second Home Assistant throughput sensor with the prototype's one-second
-figures. Use transferred byte counts and elapsed monotonic time for the controlled result.
+The throughput sensors report the latest completed successful SCSI `READ(10)`, the command maximum,
+and successful session bytes from the first read through the latest completed read. ESPHome's
+publishing interval does not define these measurements. Use host-observed transferred byte counts
+and elapsed monotonic time for the authoritative filesystem and block results.
+
+The layer diagnostics use the same session reset and are also independent of publishing:
+
+- **HTTP fetch throughput** is successfully fetched range bytes divided by their HTTP request time;
+  it includes server, HTTP and WiFi, not WiFi alone.
+- **Block source throughput** is successful read bytes divided by time spent synchronously obtaining
+  those bytes from the cache/block layer, including prefetch waits.
+- **USB transport throughput** is successful read bytes divided by the remainder of completed
+  `READ(10)` command time after synchronous source time is removed. It includes TinyUSB scheduling
+  and status, and is an operational estimate rather than a PHY measurement.
+- **Session USB read throughput** spans the first read callback through the latest completed read,
+  so it includes inter-command gaps and is the device-side counterpart to a host `dd` result.
+
+The stages overlap through background prefetch, so their times and rates must not be added together.
+Keep `usb_trace: false` during performance tests; enable its NVS flight recorder only when diagnosing
+USB negotiation or power loss.
+
+The device also keeps a RAM-only Space-Saving table of the 64 most frequently touched 4 KiB image
+pages (768 bytes). **Dump hot blocks** logs each candidate's LBA range and its minimum-to-estimated
+touch count. Clear statistics starts a new table. Use the repeated pages to choose metadata-cache
+ranges; one-pass sequential photo data has a low confidence bound and should not drive that choice.
 
 ## Measurements
 
@@ -159,7 +214,7 @@ Record these for every cell:
 
 - pass/fail and failure reason;
 - time to USB enumeration, medium ready and usable content;
-- exact bytes and time for the controlled read, plus sustained B/s;
+- exact file bytes and time for the filesystem workload, plus effective B/s;
 - maximum and p95 MSC callback duration, callback size and time waiting for source data;
 - runway low-water mark and empty count, where applicable;
 - served bytes, network-fetched bytes and fetched/served amplification;
@@ -173,23 +228,35 @@ The aggregate averages already exposed by the component are insufficient for jit
 The benchmark build may collect a bounded latency histogram, but normal firmware must not retain a
 large trace merely for this plan.
 
-## Isolation benchmarks
+## Block-level and transport benchmarks
 
-Run these on the Mac before interpreting the 45-cell matrix:
+Run these on the Mac before interpreting the filesystem matrix. They isolate the ceiling and the
+slow layer, but never substitute for a filesystem result.
+
+### Raw block results by device
+
+Record `bytes; elapsed; B/s; stalls` for each applicable cell.
+
+| Raw block result | `S3` | `S3+PSRAM` | `S3+SD` |
+|---|---:|---:|---:|
+| RAM-backed MSC, 4 KiB FIFO | | | |
+| RAM-backed MSC, 8 KiB FIFO | | | |
+| Integrated sequential 8 MiB read | | | |
+| SD-backed sequential 8 MiB read | — | — | |
+
+### Transport isolation
 
 | Benchmark | Question answered | Pass condition |
 |---|---|---|
-| RAM-backed MSC, 4 KiB FIFO | Present USB baseline | Exact data; stable rate recorded |
-| RAM-backed MSC, 8 KiB FIFO | Actual USB ceiling on this board and host | At least 0.90 MB/s |
 | Network into memory, repeated 64 KiB ranges | Present producer ceiling | Rate and latency distribution recorded |
 | Network into memory, one long range | Cost of HTTP request boundaries | At least 1.20 MB/s with useful jitter margin |
-| Integrated controlled 8 MiB read | Pipeline loss | At least 0.85 MB/s eventually |
-| SD-backed controlled 8 MiB read | Local-storage ceiling | Within 10% of RAM-backed MSC |
+| SD into memory | SD producer ceiling | Faster than the measured USB ceiling |
 
 If RAM-backed MSC misses its target, work on TinyUSB buffers, scheduling and task affinity before
 touching HTTP. If long-range networking misses its target, work on TCP/WiFi settings before adding
 cache machinery. If both pass but the integrated test fails, runway starvation or task interaction
-is the problem.
+is the problem. If block tests pass but filesystem tests do not, investigate the host's metadata
+read pattern, cache amplification and latency rather than pursuing a higher sequential number.
 
 ## Acceptance gates
 
@@ -198,12 +265,15 @@ A candidate change survives only when:
 - both frames and the Mac pass all five library sizes;
 - no host sees a corrupt or mixed-generation sector;
 - the strict frame never observes an avoidable USB disappearance;
-- median controlled throughput improves, or real-frame time to usable content improves without a
-  material throughput regression;
+- Mac filesystem rate or frame time to usable content improves without a material regression on
+  another host or library size;
 - fetched/served amplification does not regress without a measured user-visible benefit;
 - three repeated decisive runs vary by no more than 10%, or the variance is explained;
+- 1 s and 5 s ESPHome publishing intervals preserve the same command-level maximum for the same
+  controlled workload;
 - failure still removes the medium safely rather than returning invented or stale data.
 
-The winning network design should approach the measured RAM-backed USB ceiling. If it cannot do so
-reliably after the single-request PSRAM runway and transport tuning, prefer verified SD staging over
-a bespoke network protocol.
+A faster raw block test alone never passes a candidate. The winning design must improve the
+filesystem matrix and should approach the measured RAM-backed USB ceiling. If it cannot do so
+reliably after the single-request PSRAM runway and transport tuning, prefer verified SD staging
+over a bespoke network protocol.

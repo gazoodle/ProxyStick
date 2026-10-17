@@ -25,6 +25,10 @@ enum Metric : uint8_t {
   TOTAL_BYTES_SERVED,
   READ_THROUGHPUT,
   MAX_READ_THROUGHPUT,
+  SESSION_READ_THROUGHPUT,
+  HTTP_FETCH_THROUGHPUT,
+  SOURCE_READ_THROUGHPUT,
+  USB_TRANSPORT_THROUGHPUT,
   NETWORK_BYTES_FETCHED,
   CACHE_HIT_BYTES,
   HTTP_REQUESTS,
@@ -35,6 +39,7 @@ enum Metric : uint8_t {
   AVERAGE_HTTP_CHUNK_BYTES,
   PREFETCH_HITS,
   PREFETCH_WAITS,
+  AVERAGE_PREFETCH_WAIT_MS,
   PREFETCH_DISCARDS,
   PREFETCH_FAILURES,
   METRIC_COUNT,
@@ -65,6 +70,7 @@ class ProxyStick : public PollingComponent {
   void clear_statistics();
   // Logs the stored USB traces (usb_trace: true), a few lines per loop.
   void dump_trace();
+  void dump_hot_blocks();
   // The irreversible USB_PHY_SEL burn (proxy_stick.cpp): arm, schedule, restart.
   void arm_usb_phy_fuse(bool armed);
   void schedule_usb_phy_fuse();
@@ -117,10 +123,6 @@ class ProxyStick : public PollingComponent {
   Manifest latest_;
   bool has_latest_{false};
 
-  uint64_t throughput_bytes_{0};
-  uint32_t throughput_at_{0};
-  uint32_t throughput_epoch_{UINT32_MAX};
-  float max_throughput_{0};
 #ifdef USE_SENSOR
   std::array<sensor::Sensor *, METRIC_COUNT> sensors_{};
 #endif

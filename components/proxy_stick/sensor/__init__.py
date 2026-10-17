@@ -52,6 +52,10 @@ SENSORS = {
     "total_bytes_served": ("TOTAL_BYTES_SERVED", _bytes("mdi:database-arrow-up", STATE_CLASS_TOTAL_INCREASING)),
     "read_throughput": ("READ_THROUGHPUT", _rate()),
     "max_read_throughput": ("MAX_READ_THROUGHPUT", _rate()),
+    "session_read_throughput": ("SESSION_READ_THROUGHPUT", _rate()),
+    "http_fetch_throughput": ("HTTP_FETCH_THROUGHPUT", _rate()),
+    "source_read_throughput": ("SOURCE_READ_THROUGHPUT", _rate()),
+    "usb_transport_throughput": ("USB_TRANSPORT_THROUGHPUT", _rate()),
     "network_bytes_fetched": ("NETWORK_BYTES_FETCHED", _bytes("mdi:download-network-outline")),
     "cache_hit_bytes": ("CACHE_HIT_BYTES", _bytes("mdi:cached")),
     "http_requests": ("HTTP_REQUESTS", _schema("mdi:counter")),
@@ -65,6 +69,7 @@ SENSORS = {
     ),
     "prefetch_hits": ("PREFETCH_HITS", _schema("mdi:check-network-outline")),
     "prefetch_waits": ("PREFETCH_WAITS", _schema("mdi:timer-sand")),
+    "average_prefetch_wait_time": ("AVERAGE_PREFETCH_WAIT_MS", _milliseconds("mdi:timer-sand")),
     "prefetch_discards": ("PREFETCH_DISCARDS", _schema("mdi:delete-clock-outline")),
     "prefetch_failures": ("PREFETCH_FAILURES", _schema("mdi:alert-circle-outline")),
 }

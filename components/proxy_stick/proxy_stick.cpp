@@ -1,6 +1,5 @@
 #include "proxy_stick.h"
 
-#include <algorithm>
 #include <cinttypes>
 
 #include "esp_efuse.h"
@@ -343,8 +342,11 @@ void ProxyStick::dump_trace() {
 #endif
 }
 
+void ProxyStick::dump_hot_blocks() { proxy_stick::dump_hot_blocks(); }
+
 void ProxyStick::clear_statistics() {
   stats.reset_session();
+  this->update();
   ESP_LOGI(TAG, "Session statistics cleared");
 }
 
@@ -372,30 +374,24 @@ void ProxyStick::update() {
   const auto average = [](uint64_t total, uint64_t count, float scale) {
     return count == 0 ? 0.0f : static_cast<float>(total) / count / scale;
   };
+  const auto rate = [](uint64_t bytes, uint64_t microseconds) {
+    return microseconds == 0 ? 0.0f : static_cast<float>(bytes) * 1000000.0f / microseconds;
+  };
 
-  // Throughput over the time since the last update; its maximum restarts with the session.
-  const uint32_t now = millis();
   const uint64_t served = stats.total_served_bytes.load(std::memory_order_relaxed);
-  const uint32_t epoch = stats.epoch.load(std::memory_order_relaxed);
-  float throughput = 0;
-  if (this->throughput_at_ != 0 && now != this->throughput_at_)
-    throughput = (served - this->throughput_bytes_) * 1000.0f / (now - this->throughput_at_);
-  this->throughput_bytes_ = served;
-  this->throughput_at_ = now;
-  if (epoch != this->throughput_epoch_) {
-    this->throughput_epoch_ = epoch;
-    this->max_throughput_ = 0;
-  }
-  this->max_throughput_ = std::max(this->max_throughput_, throughput);
-
   const uint64_t requests = stats.http_request_count.load(std::memory_order_relaxed);
   std::array<float, METRIC_COUNT> values{};
   values[USB_SCSI_COMMANDS] = load(stats.usb_scsi_commands);
   values[BYTES_SERVED] = load(stats.session_served_bytes);
   values[TOTAL_BYTES_SERVED] = static_cast<float>(served);
-  values[READ_THROUGHPUT] = throughput;
-  values[MAX_READ_THROUGHPUT] = this->max_throughput_;
-  values[NETWORK_BYTES_FETCHED] = load(stats.network_fetched_bytes);
+  values[READ_THROUGHPUT] = load(stats.read_throughput);
+  values[MAX_READ_THROUGHPUT] = load(stats.max_read_throughput);
+  values[SESSION_READ_THROUGHPUT] = load(stats.session_read_throughput);
+  const uint64_t fetched = stats.network_fetched_bytes.load(std::memory_order_relaxed);
+  values[HTTP_FETCH_THROUGHPUT] = rate(fetched, stats.http_success_time_us.load(std::memory_order_relaxed));
+  values[SOURCE_READ_THROUGHPUT] = load(stats.source_read_throughput);
+  values[USB_TRANSPORT_THROUGHPUT] = load(stats.usb_transport_throughput);
+  values[NETWORK_BYTES_FETCHED] = static_cast<float>(fetched);
   values[CACHE_HIT_BYTES] = load(stats.cache_hit_bytes);
   values[HTTP_REQUESTS] = static_cast<float>(requests);
   values[HTTP_FAILURES] = load(stats.http_request_failures);
@@ -407,6 +403,9 @@ void ProxyStick::update() {
                                              stats.http_data_event_count.load(std::memory_order_relaxed), 1);
   values[PREFETCH_HITS] = load(stats.prefetch_hits);
   values[PREFETCH_WAITS] = load(stats.prefetch_waits);
+  values[AVERAGE_PREFETCH_WAIT_MS] =
+      average(stats.prefetch_wait_time_us.load(std::memory_order_relaxed),
+              stats.prefetch_waits.load(std::memory_order_relaxed), 1000);
   values[PREFETCH_DISCARDS] = load(stats.prefetch_discards);
   values[PREFETCH_FAILURES] = load(stats.prefetch_failures);
 

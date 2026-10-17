@@ -169,9 +169,19 @@ void fetch_worker(void *) {
 
 bool read_prefetched_chunk(uint64_t start, void *buffer, uint32_t size) {
   bool counted_wait = false;
+  uint32_t wait_started_us = 0;
+  uint32_t wait_epoch = 0;
+  const auto finish_wait = [&]() {
+    if (counted_wait && stats.epoch.load(std::memory_order_relaxed) == wait_epoch) {
+      stats.prefetch_waits.fetch_add(1, std::memory_order_relaxed);
+      stats.prefetch_wait_time_us.fetch_add(micros() - wait_started_us, std::memory_order_relaxed);
+    }
+    counted_wait = false;
+  };
   while (media_present.load()) {
     xSemaphoreTake(cache_mutex, portMAX_DELAY);
     if (image_cache_epoch == cache_epoch && range_contains(image_cache_start, image_cache_size, start, size)) {
+      finish_wait();
       std::memcpy(buffer, image_cache.get() + start - image_cache_start, size);
       stats.cache_hit_bytes.fetch_add(size, std::memory_order_relaxed);
       if (prefetch_state == PrefetchState::EMPTY)
@@ -189,6 +199,7 @@ bool read_prefetched_chunk(uint64_t start, void *buffer, uint32_t size) {
         image_cache_url = cache_image_url;
         const bool was_speculative = prefetch_speculative;
         prefetch_state = PrefetchState::EMPTY;
+        finish_wait();
         std::memcpy(buffer, image_cache.get() + start - image_cache_start, size);
         if (was_speculative) {
           stats.prefetch_hits.fetch_add(1, std::memory_order_relaxed);
@@ -204,6 +215,7 @@ bool read_prefetched_chunk(uint64_t start, void *buffer, uint32_t size) {
 
     if (prefetch_state == PrefetchState::FAILED && prefetch_epoch == cache_epoch &&
         range_contains(prefetch_start, prefetch_size, start, size)) {
+      finish_wait();
       xSemaphoreGive(cache_mutex);
       return false;
     }
@@ -214,14 +226,18 @@ bool read_prefetched_chunk(uint64_t start, void *buffer, uint32_t size) {
     if (prefetch_state == PrefetchState::EMPTY && !fetch_worker_busy)
       schedule_fetch_locked(aligned_start, false);
     if (!counted_wait) {
-      stats.prefetch_waits.fetch_add(1, std::memory_order_relaxed);
       counted_wait = true;
+      wait_started_us = micros();
+      wait_epoch = stats.epoch.load(std::memory_order_relaxed);
     }
     xSemaphoreGive(cache_mutex);
 
-    if (xSemaphoreTake(fetch_complete, pdMS_TO_TICKS(HTTP_TIMEOUT_MS * 2 + 1000)) != pdTRUE)
+    if (xSemaphoreTake(fetch_complete, pdMS_TO_TICKS(HTTP_TIMEOUT_MS * 2 + 1000)) != pdTRUE) {
+      finish_wait();
       return false;
+    }
   }
+  finish_wait();
   return false;
 }
 

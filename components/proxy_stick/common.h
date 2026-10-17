@@ -29,15 +29,22 @@ struct Statistics {
   std::atomic<uint64_t> http_request_count{0};
   std::atomic<uint64_t> http_request_failures{0};
   std::atomic<uint64_t> http_request_time_us{0};
+  std::atomic<uint64_t> http_success_time_us{0};
   std::atomic<uint64_t> http_first_byte_time_us{0};
   std::atomic<uint64_t> http_data_event_count{0};
   std::atomic<uint64_t> http_data_event_bytes{0};
   std::atomic<uint32_t> last_http_request_us{0};
   std::atomic<uint64_t> prefetch_hits{0};
   std::atomic<uint64_t> prefetch_waits{0};
+  std::atomic<uint64_t> prefetch_wait_time_us{0};
   std::atomic<uint64_t> prefetch_discards{0};
   std::atomic<uint64_t> prefetch_failures{0};
   std::atomic<uint64_t> usb_scsi_commands{0};
+  std::atomic<uint64_t> read_throughput{0};
+  std::atomic<uint64_t> max_read_throughput{0};
+  std::atomic<uint64_t> session_read_throughput{0};
+  std::atomic<uint64_t> source_read_throughput{0};
+  std::atomic<uint64_t> usb_transport_throughput{0};
   std::atomic<uint32_t> epoch{0};
 
   void reset_session();
