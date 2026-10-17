@@ -23,8 +23,8 @@
 namespace esphome::proxy_stick {
 
 static const char *const TAG = "proxy_stick";
-// Long enough for a host to notice the drive has gone, so it reads the new one from scratch.
-static constexpr uint32_t REMOUNT_PAUSE_MS = 1500;
+// Long enough for a host to observe no medium before the replacement appears.
+static constexpr uint32_t MEDIUM_CHANGE_PAUSE_MS = 1500;
 
 void ProxyStick::set_endpoint(const std::string &endpoint) {
   this->endpoint_ = endpoint;
@@ -87,11 +87,7 @@ void ProxyStick::attach_usb_() {
   // The pins are the drive's now; the JTAG override has done its job and must not hold our pull-up off.
   usb_serial_jtag_ll_phy_disable_pull_override();
   this->driver_installed_ = true;
-  this->usb_connected_ = true;
   trace::milestone(trace::USB_CONNECT);
-  // The USB switch may have restored "off" before this ran; installing the driver connected anyway.
-  if (!this->enabled_)
-    this->usb_disconnect_();
   ESP_LOGI(TAG, "USB drive attached; no medium until the image service is heard from");
 }
 
@@ -139,8 +135,8 @@ void ProxyStick::loop() {
       break;
   }
 
-  if (this->reconnect_at_ != 0 && static_cast<int32_t>(now - this->reconnect_at_) >= 0)
-    this->replug_();
+  if (this->medium_ready_at_ != 0 && static_cast<int32_t>(now - this->medium_ready_at_) >= 0)
+    this->finish_medium_change_();
   trace::dump_step();
 
   this->set_healthy_(connected && !this->discovery_failed_ && this->has_latest_);
@@ -150,7 +146,7 @@ void ProxyStick::loop() {
 #endif
 }
 
-// A newly discovered image: mount it, or, if another is mounted, unplug and mount it after a pause.
+// A newly discovered image: mount it, or withdraw the old medium and mount it after a pause.
 void ProxyStick::offer_(const Manifest &manifest, uint32_t now) {
   this->latest_ = manifest;
   this->has_latest_ = true;
@@ -161,33 +157,19 @@ void ProxyStick::offer_(const Manifest &manifest, uint32_t now) {
   const bool has_media = media_present.load();
   if (has_media && !changed)
     return;
-  if (has_media && this->usb_connected_) {
-    ESP_LOGI(TAG, "New image revision; disconnecting USB before switching");
-    this->unplug_(now);
+  if (has_media) {
+    ESP_LOGI(TAG, "New image revision; withdrawing the medium before switching");
+    this->begin_medium_change_(now);
     return;
   }
-  if (this->reconnect_at_ != 0)
+  if (this->medium_ready_at_ != 0)
     return;  // The pause applies the latest when it ends.
+  if (usb_read_in_progress()) {
+    this->medium_ready_at_ = now | 1;  // Retry from loop once the old read has completed.
+    return;
+  }
 
   this->apply_(manifest);
-  if (!this->usb_connected_)
-    this->usb_connect_();
-}
-
-void ProxyStick::usb_connect_() {
-  if (!this->driver_installed_)
-    return;  // Not attached yet: attach_usb_() connects when the handover gap ends.
-  tud_connect();
-  this->usb_connected_ = true;
-  trace::milestone(trace::USB_CONNECT);
-}
-
-void ProxyStick::usb_disconnect_() {
-  if (!this->driver_installed_)
-    return;
-  tud_disconnect();
-  this->usb_connected_ = false;
-  trace::milestone(trace::USB_DISCONNECT);
 }
 
 void ProxyStick::apply_(const Manifest &manifest) {
@@ -196,32 +178,34 @@ void ProxyStick::apply_(const Manifest &manifest) {
   this->revision_ = manifest.revision;
   this->generation_ = manifest.generation;
   media_present.store(true);
+  if (this->driver_installed_)
+    notify_media_changed();
   trace::milestone(trace::MEDIUM_READY);
   ESP_LOGI(TAG, "Medium ready: revision %" PRIu32 ", %" PRIu64 " bytes", manifest.revision, manifest.bytes);
 }
 
-void ProxyStick::unplug_(uint32_t now) {
+void ProxyStick::begin_medium_change_(uint32_t now) {
   media_present.store(false);
-  this->usb_disconnect_();
-  this->usb_connected_ = false;
-  invalidate_cache();
+  if (this->driver_installed_)
+    notify_media_changed();
   stats.reset_session();
-  this->reconnect_at_ = (now + REMOUNT_PAUSE_MS) | 1;  // Never 0, which means no pause.
+  this->medium_ready_at_ = (now + MEDIUM_CHANGE_PAUSE_MS) | 1;  // Never 0, which means no pause.
 }
 
-void ProxyStick::replug_() {
-  this->reconnect_at_ = 0;
+void ProxyStick::finish_medium_change_() {
+  if (usb_read_in_progress())
+    return;
+  this->medium_ready_at_ = 0;
   if (this->enabled_ && this->has_latest_ && this->events_.connected() && !this->discovery_failed_)
     this->apply_(this->latest_);
-  this->usb_connect_();
-  ESP_LOGI(TAG, "USB reconnected");
 }
 
 void ProxyStick::remove_media_(const char *why) {
   if (!media_present.exchange(false))
     return;
+  if (this->driver_installed_)
+    notify_media_changed();
   trace::milestone(trace::MEDIUM_REMOVED);
-  invalidate_cache();
   ESP_LOGW(TAG, "USB medium removed: %s", why);
 }
 
@@ -246,16 +230,12 @@ void ProxyStick::set_enabled(bool enabled) {
   this->enabled_ = enabled;
   if (!enabled) {
     stats.reset_session();
-    media_present.store(false);
-    invalidate_cache();
-    if (this->usb_connected_)
-      this->usb_disconnect_();
-    this->reconnect_at_ = 0;
-    ESP_LOGI(TAG, "USB drive disabled");
+    this->medium_ready_at_ = 0;
+    if (media_present.exchange(false) && this->driver_installed_)
+      notify_media_changed();
+    ESP_LOGI(TAG, "USB drive disabled; device remains attached with no medium");
     return;
   }
-  if (this->driver_installed_ && !this->usb_connected_)
-    this->usb_connect_();
   ESP_LOGI(TAG, "USB drive enabled");
   if (this->has_latest_ && this->events_.connected())
     this->offer_(this->latest_, millis());
@@ -264,10 +244,10 @@ void ProxyStick::set_enabled(bool enabled) {
 bool ProxyStick::usb_host_configured() const { return this->driver_installed_ && tud_mounted(); }
 
 void ProxyStick::refresh() {
-  if (!this->usb_connected_)
+  if (!this->driver_installed_ || !this->enabled_)
     return;
-  ESP_LOGI(TAG, "USB refresh requested");
-  this->unplug_(millis());
+  ESP_LOGI(TAG, "USB medium refresh requested");
+  this->begin_medium_change_(millis());
 }
 
 bool ProxyStick::otg_at_power_on() const { return esp_efuse_read_field_bit(ESP_EFUSE_USB_PHY_SEL); }
@@ -354,8 +334,8 @@ void ProxyStick::set_read_block_power(uint8_t power) {
   const uint32_t size = 1UL << power;
   if (power < 9 || power > 16 || size == read_block_size())
     return;
-  if (this->usb_connected_) {
-    ESP_LOGW(TAG, "Disable the USB drive before changing the read block size");
+  if (this->enabled_ || usb_read_in_progress()) {
+    ESP_LOGW(TAG, "Disable the USB drive and wait for its current read before changing the read block size");
     return;
   }
   if (!resize_read_buffers(size)) {

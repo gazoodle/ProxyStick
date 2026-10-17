@@ -3,7 +3,6 @@ import esphome.config_validation as cv
 from esphome.components import button
 from esphome.const import (
     CONF_DISABLED_BY_DEFAULT,
-    DEVICE_CLASS_RESTART,
     ENTITY_CATEGORY_CONFIG,
     ENTITY_CATEGORY_DIAGNOSTIC,
 )
@@ -37,9 +36,7 @@ BUTTONS = {
     ),
     "clear_statistics": (
         "clear_statistics",
-        button.button_schema(
-            ActionButton, icon="mdi:counter", device_class=DEVICE_CLASS_RESTART, entity_category=ENTITY_CATEGORY_DIAGNOSTIC
-        ),
+        button.button_schema(ActionButton, icon="mdi:counter", entity_category=ENTITY_CATEGORY_DIAGNOSTIC),
     ),
 }
 

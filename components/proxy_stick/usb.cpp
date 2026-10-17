@@ -36,6 +36,8 @@ uint64_t read_session_started_ms{0};
 uint64_t read_session_bytes{0};
 uint64_t read_session_source_us{0};
 uint64_t read_session_usb_us{0};
+std::atomic_bool media_change_pending{false};
+std::atomic_bool read_active{false};
 
 constexpr uint32_t HOT_PAGE_BYTES = 4096;
 constexpr size_t HOT_PAGE_COUNT = 64;
@@ -135,6 +137,13 @@ void finish_read_command() {
   }
 }
 
+bool report_media_change(uint8_t lun) {
+  if (!media_change_pending.exchange(false, std::memory_order_relaxed))
+    return false;
+  tud_msc_set_sense(lun, SCSI_SENSE_UNIT_ATTENTION, 0x28, 0x00);  // Not ready to ready; medium changed.
+  return true;
+}
+
 int32_t read_blocks(uint32_t lba, uint32_t offset, void *buffer, uint32_t size) {
   const uint64_t start = static_cast<uint64_t>(lba) * SECTOR_SIZE + offset;
   const uint64_t disk_size = static_cast<uint64_t>(sector_count.load()) * SECTOR_SIZE;
@@ -169,9 +178,15 @@ void usb_event(tinyusb_event_t *event, void *) {
   const unsigned id = event->id;
   ESP_LOGI(TAG, "USB bus %s", id < 4 ? NAMES[id] : "event");
   trace::record(trace::BUS, id, nullptr, 0, true);
-  if (event->id == TINYUSB_EVENT_DETACHED)
+  if (event->id == TINYUSB_EVENT_DETACHED) {
     read_command = {};
+    read_active.store(false, std::memory_order_relaxed);
+  }
 }
+
+void notify_media_changed() { media_change_pending.store(true, std::memory_order_relaxed); }
+
+bool usb_read_in_progress() { return read_active.load(std::memory_order_relaxed); }
 
 void dump_hot_blocks() {
   std::array<HotPage, HOT_PAGE_COUNT> pages;
@@ -210,6 +225,10 @@ void tud_msc_inquiry_cb(uint8_t, uint8_t vendor_id[8], uint8_t product_id[16], u
 
 bool tud_msc_test_unit_ready_cb(uint8_t lun) {
   count_command();
+  if (report_media_change(lun)) {
+    trace::record(trace::TEST_UNIT_READY, false);
+    return false;
+  }
   const bool ready = media_present.load();
   trace::record(trace::TEST_UNIT_READY, ready);
   if (ready)
@@ -218,10 +237,19 @@ bool tud_msc_test_unit_ready_cb(uint8_t lun) {
   return false;
 }
 
-void tud_msc_capacity_cb(uint8_t, uint32_t *block_count, uint16_t *block_size) {
+void tud_msc_capacity_cb(uint8_t lun, uint32_t *block_count, uint16_t *block_size) {
   count_command();
-  *block_count = sector_count.load();
-  *block_size = SECTOR_SIZE;
+  const bool changed = report_media_change(lun);
+  const bool present = media_present.load();
+  if (changed || !present) {
+    *block_count = 0;
+    *block_size = 0;
+    if (!changed)
+      tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);  // Medium not present.
+  } else {
+    *block_count = sector_count.load();
+    *block_size = SECTOR_SIZE;
+  }
   trace::record(trace::CAPACITY, 0, block_count, sizeof(*block_count));
 }
 
@@ -243,6 +271,13 @@ bool tud_msc_is_writable_cb(uint8_t) {
 }
 
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buffer, uint32_t size) {
+  if (report_media_change(lun)) {
+    if (read_command.active)
+      read_command.failed = true;
+    else
+      count_command();
+    return -1;
+  }
   if (!read_command.active) {
     const uint32_t epoch = stats.epoch.load(std::memory_order_relaxed);
     if (read_session_epoch != epoch) {
@@ -253,6 +288,7 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
       read_session_usb_us = 0;
     }
     read_command = {esphome::micros(), epoch, 0, 0, true, false};
+    read_active.store(true, std::memory_order_relaxed);
     count_command();
   }
   const uint32_t source_started_us = esphome::micros();
@@ -260,7 +296,10 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
   read_command.source_us += esphome::micros() - source_started_us;
   if (read < 0) {
     read_command.failed = true;
-    tud_msc_set_sense(lun, SCSI_SENSE_MEDIUM_ERROR, 0x11, 0x00);  // Unrecovered read error.
+    if (media_present.load())
+      tud_msc_set_sense(lun, SCSI_SENSE_MEDIUM_ERROR, 0x11, 0x00);  // Unrecovered read error.
+    else
+      tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);  // Medium not present.
   } else {
     read_command.bytes += read;
   }
@@ -270,6 +309,7 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
 void tud_msc_read10_complete_cb(uint8_t) {
   finish_read_command();
   read_command = {};
+  read_active.store(false, std::memory_order_relaxed);
 }
 
 int32_t tud_msc_write10_cb(uint8_t lun, uint32_t, uint32_t, uint8_t *, uint32_t) {

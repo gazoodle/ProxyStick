@@ -65,7 +65,7 @@ class ProxyStick : public PollingComponent {
   bool enabled() const { return this->enabled_; }
   bool upstream_healthy() const { return this->healthy_; }
   bool usb_host_configured() const;
-  // Unplug and replug the USB drive, so the host looks at it again.
+  // Withdraw and reinsert the medium, so the host reads it afresh without losing the USB device.
   void refresh();
   void clear_statistics();
   // Logs the stored USB traces (usb_trace: true), a few lines per loop.
@@ -89,14 +89,12 @@ class ProxyStick : public PollingComponent {
  protected:
   void offer_(const Manifest &manifest, uint32_t now);
   void apply_(const Manifest &manifest);
-  void unplug_(uint32_t now);
-  void replug_();
+  void begin_medium_change_(uint32_t now);
+  void finish_medium_change_();
   void remove_media_(const char *why);
   void set_healthy_(bool healthy);
   void attach_usb_();
   void burn_scheduled_usb_phy_fuse_();
-  void usb_connect_();
-  void usb_disconnect_();
 
   std::string endpoint_;
   std::string token_;
@@ -106,12 +104,11 @@ class ProxyStick : public PollingComponent {
   bool events_started_{false};
   bool looped_{false};
   bool driver_installed_{false};
-  bool usb_connected_{false};
   bool enabled_{true};
   bool healthy_{false};
   bool health_known_{false};  // So the first loop publishes, healthy or not.
   bool discovery_failed_{false};
-  uint32_t reconnect_at_{0};
+  uint32_t medium_ready_at_{0};
   uint32_t attach_at_{0};  // When the handover gap ends and the drive attaches; 0 once attached.
   uint32_t handover_gap_ms_{500};
   bool usb_phy_fuse_armed_{false};

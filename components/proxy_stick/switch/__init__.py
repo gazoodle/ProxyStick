@@ -15,7 +15,7 @@ CONF_USB_PHY_FUSE_ARMED = "usb_phy_fuse_armed"
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(CONF_PROXY_STICK_ID): cv.use_id(ProxyStick),
-        # The USB drive on or off; off, the host sees no drive at all. Remembered over restarts.
+        # The removable medium on or off; the USB device stays attached. Remembered over restarts.
         cv.Optional(CONF_USB): switch.switch_schema(
             UsbSwitch,
             icon="mdi:usb-flash-drive",

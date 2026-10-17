@@ -117,6 +117,10 @@ or add `stick.routes()` to an aiohttp app of your own.
 - Throughput is WiFi-bound, in the hundreds of KB/s: fine for photos, slow for video.
 - The stick needs the server while it is in use. Without the server there is no drive.
 
+Turning **USB drive** off leaves the USB device attached and reports an empty removable-media
+reader. Turning it on, refreshing it or publishing a new image reports a medium change, so the host
+reads the filesystem afresh without seeing the USB device disappear.
+
 ## Frames that keep restarting the stick
 
 Some frames are quick, almost twitchy, about USB. When the stick goes in they show "storage

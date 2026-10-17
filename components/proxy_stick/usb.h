@@ -12,6 +12,9 @@ namespace esphome::proxy_stick {
 void set_inquiry(const char *vendor, const char *product, const char *revision);
 // esp_tinyusb's event hook: bus attach, detach, suspend and resume, logged (and traced).
 void usb_event(tinyusb_event_t *event, void *arg);
+// Keeps the USB device attached while telling the host that its removable medium changed.
+void notify_media_changed();
+bool usb_read_in_progress();
 // Logs the most frequently requested 4 KiB image pages since statistics were cleared.
 void dump_hot_blocks();
 

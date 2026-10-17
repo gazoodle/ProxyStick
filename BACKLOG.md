@@ -100,10 +100,6 @@ Planned, not started. Newest first within each section. Don't start an item unle
   drive's HTTP failure and prefetch counters, and a USB trace (`READ 10 FAILED`, read
   ranges). Suspects: the read-ahead cache serving a stale or wrong block, a short HTTP read
   accepted, or this frame reading in a pattern the Mac and the second frame never did.
-- **Change images without disconnecting USB.** Refresh, the switch and the front button use
-  `tud_disconnect`/`tud_connect`, which the strict frame punishes as a disappearing device.
-  Stay attached: report "no medium", then "medium changed" (UNIT ATTENTION), as a card reader
-  does. Test on both frames.
 - **After the USB PHY fuse is burnt, the arm switch and burn button still show** (asked
   2026-10-16, after the S3U burn). Both controls are already `disabled_by_default`, but that is a
   static discovery hint: ESPHome cannot disable or remove them conditionally at runtime, and Home

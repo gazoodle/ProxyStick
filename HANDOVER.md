@@ -1,6 +1,7 @@
 # Handover
 
-Last updated: 2026-10-16. Nothing is committed yet: the owner reviews the first commit.
+Last updated: 2026-10-17. Performance diagnostics are on `main` at `8f493f3`; the in-band
+medium-change state machine is the current change and awaits hardware verification.
 
 ## State
 
@@ -53,7 +54,8 @@ version clash; the firmware's config dump reports the fuses instead.)
 - The second frame tolerated the JTAG handover all along; never fix one frame at the expense
   of the other. Test every change on both.
 - Never `tud_disconnect` to refresh: the strict frame punishes any disappearance, at any time.
-  Report medium changes in-band instead (backlog).
+  Runtime off, refresh and image replacement now keep TinyUSB attached, report no medium, then
+  raise UNIT ATTENTION when the medium returns. This still needs both-frame hardware verification.
 - `usb_trace: true` stays the tool for any new host: it keeps the last 16 boots in flash.
 
 ## Not verified: needs the hardware
@@ -63,8 +65,8 @@ to this version:
 
 1. `tools/dev <folder>`, Install from ESPHome on the box, confirm the frame mounts.
 2. Stop the server: the medium goes within 20 s (the lease); restart it: it comes back.
-3. `REFRESH` with no change: exactly one unplug, pause, replug. Change a file and `REFRESH`:
-   the same, with the new contents.
+3. `REFRESH` with no change: the USB device stays configured, reports no medium, then the medium
+   returns with UNIT ATTENTION. Change a file and `REFRESH`: the same, with the new contents.
 4. Watch for resets, heap pressure, watchdog warnings and short reads in the logs.
 5. Compare throughput with the prototype's 442 KB/s single-buffer baseline.
 
@@ -98,7 +100,6 @@ to this version:
   successful" (60 s).** ESPHome marks new firmware good only then; lose power sooner and the
   bootloader rolls back to the previous firmware. A frame that power-cycles the stick never
   lets new firmware pass, so a test run silently uses the old one (2026-10-16, cost a run).
-- Firmware is only ever built by the ESPHome builder on the box; `tools/compile` is just a
-  local check that the component still builds.
+- Firmware is built by the owner on the live ESPHome box; agents do not run `tools/compile`.
 - macOS asks once to allow incoming connections, for Python (the server) and git (the fake git
   host), the first time `tools/dev` runs.

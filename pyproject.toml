@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "proxystick"
-version = "0.2.0"
+version = "0.3.0"
 description = "Serve a folder as a FAT32 image to a ProxyStick: an ESP32-S3 that is a USB stick over WiFi."
 readme = "README.md"
 requires-python = ">=3.11"
