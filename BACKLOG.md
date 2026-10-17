@@ -32,6 +32,14 @@ Planned, not started. Newest first within each section. Don't start an item unle
 
 ## Device
 
+- **Performance: measure and raise throughput** (asked 2026-10-17). History and figures in
+  `docs/PERFORMANCE.md`: the prototype went from ~110 KB/s to **646 KB/s** (8 MiB sequential,
+  double-buffer prefetch); a frame session peaked at 237,331 B/s and fetched 2.09× what it read.
+  This version is not yet benchmarked. To do: rerun the controlled 8 MiB test (with
+  `update_interval: 1s` when comparing peaks), and repeat it after every transport change.
+  Next experiments: a PSRAM cache of hot ranges (partition table, FATs, directories) on the
+  AtomS3R beside the sequential double buffer; read-ahead suited to frames' metadata-heavy
+  reads; more than one request in flight; and serving from an SD card (below).
 - **Writable sticks: copy-on-write sessions** (owner design, 2026-10-17; for the air-gapped
   laptop, not frames). Images stay read-only by default, and generation URLs stay immutable.
   - The server can mark an image (its own, or a real USB stick source) as writable. One client
