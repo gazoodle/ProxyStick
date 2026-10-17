@@ -32,8 +32,9 @@ Planned, not started. Newest first within each section. Don't start an item unle
 
 ## Device
 
-- **Performance: measure and raise throughput** (asked 2026-10-17). History and figures in
-  `docs/PERFORMANCE.md`: the prototype went from ~110 KB/s to **646 KB/s** (8 MiB sequential,
+- **Performance: measure and raise throughput** (asked 2026-10-17). History and figures are in
+  `docs/PERFORMANCE.md`; the experiment order and 45-cell hardware/host/library matrix are in
+  `docs/PERFORMANCE_PLAN.md`. The prototype went from ~110 KB/s to **646 KB/s** (8 MiB sequential,
   double-buffer prefetch); a frame session peaked at 237,331 B/s and fetched 2.09× what it read.
   This version is not yet benchmarked. To do: rerun the controlled 8 MiB test (with
   `update_interval: 1s` when comparing peaks), and repeat it after every transport change.
