@@ -72,6 +72,9 @@ def parser() -> argparse.ArgumentParser:
     serve.add_argument("folder", type=Path)
     serve.add_argument("--port", type=int, default=PORT)
     serve.add_argument(
+        "--debug-diagnostics", action="store_true", help="receive temporary stick debug traces"
+    )
+    serve.add_argument(
         "--state",
         type=Path,
         default=Path.home() / ".cache" / "proxystick",
@@ -83,12 +86,19 @@ def parser() -> argparse.ArgumentParser:
 def serve(args: argparse.Namespace, banner: Callable[[ProxyStick], str] = lambda _stick: "") -> int:
     """Run the server and its console until QUIT. The token, if any, comes from PROXYSTICK_TOKEN,
     never the command line, where any user of this machine could read it."""
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s: %(message)s", datefmt="%H:%M:%S")
+    from .diagnostics import ConsoleFormatter
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(ConsoleFormatter(sys.stderr.isatty() and "NO_COLOR" not in os.environ))
+    logging.basicConfig(level=logging.INFO, handlers=[handler])
     # SIGTERM ends the process without unwinding by default; this makes it stop the server first.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
     stick = ProxyStick(
-        args.folder.expanduser().resolve(), args.state.expanduser(), token=os.environ.get("PROXYSTICK_TOKEN")
+        args.folder.expanduser().resolve(),
+        args.state.expanduser(),
+        token=os.environ.get("PROXYSTICK_TOKEN"),
+        debug_diagnostics=args.debug_diagnostics,
     )
     with stick.start(port=args.port):
         print(f"Serving {stick.folder}")

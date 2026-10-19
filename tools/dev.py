@@ -18,9 +18,11 @@ one copy. The device goes in as an inline package, so both parts may have `senso
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
+import threading
 from pathlib import Path
 
 from fake_git_host import FakeGitHost, lan_address
@@ -30,6 +32,7 @@ from proxystick import console
 REPO = Path(__file__).resolve().parents[1]
 BOX = Path(os.environ.get("PROXYSTICK_BOX_ESPHOME", "/Volumes/config/esphome"))
 DEVICE_PREFIX = "dev-device"
+logger = logging.getLogger(__name__)
 
 
 def stick_config(endpoint: str) -> str:
@@ -72,8 +75,26 @@ external_components:
     return target
 
 
+def watch_configs(git: FakeGitHost, endpoint: str, device_files: list[Path], stop: threading.Event) -> None:
+    """Rewrite the box configs when either half changes, without restarting either server."""
+    sources = [REPO / "example" / "proxystick.yaml", *device_files]
+    modified = {source: source.stat().st_mtime_ns for source in sources}
+    while not stop.wait(2):
+        try:
+            current = {source: source.stat().st_mtime_ns for source in sources}
+            if current == modified:
+                continue
+            for device in device_files:
+                write_config(git, endpoint, device)
+            modified = current
+            logger.info("Updated the ESPHome development configs")
+        except Exception:
+            logger.exception("Could not update the ESPHome development configs; will retry")
+
+
 def main() -> int:
     args = console.parser().parse_args(["serve", *sys.argv[1:]])
+    args.debug_diagnostics = True  # Temporary debug build: matches example/proxystick.yaml.
     if not BOX.is_dir():
         print(f"No {BOX}: mount the box's config share first.", file=sys.stderr)
         return 1
@@ -86,7 +107,8 @@ def main() -> int:
 
     with FakeGitHost(REPO) as git:
         endpoint = f"http://{lan_address()}:{args.port}"
-        targets = [write_config(git, endpoint, device) for device in devices()]
+        device_files = devices()
+        targets = [write_config(git, endpoint, device) for device in device_files]
 
         def banner(_stick: object) -> str:
             configs = "".join(f"    ESPHome config  {target}\n" for target in targets)
@@ -95,7 +117,19 @@ def main() -> int:
                 f"{configs}    Install them from ESPHome on the box"
             )
 
-        return console.serve(args, banner)
+        stop = threading.Event()
+        watcher = threading.Thread(
+            target=watch_configs,
+            args=(git, endpoint, device_files, stop),
+            name="proxystick-config",
+            daemon=True,
+        )
+        watcher.start()
+        try:
+            return console.serve(args, banner)
+        finally:
+            stop.set()
+            watcher.join()
 
 
 if __name__ == "__main__":

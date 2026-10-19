@@ -41,8 +41,17 @@ STOP_SECONDS = 5
 
 
 class ProxyStick:
-    def __init__(self, folder: Path, state_dir: Path, *, token: str | None = None, label: str = fat.LABEL):
+    def __init__(
+        self,
+        folder: Path,
+        state_dir: Path,
+        *,
+        token: str | None = None,
+        label: str = fat.LABEL,
+        debug_diagnostics: bool = False,
+    ):
         self.folder, self.state_dir, self.token, self.label = folder, state_dir, token, label
+        self.debug_diagnostics = debug_diagnostics
         self.lock = threading.Lock()  # The state.
         self.building = threading.Lock()  # One build at a time.
         self.listeners: set[asyncio.Queue[str | None]] = set()
@@ -239,6 +248,15 @@ class ProxyStick:
         path = self.state_dir / name
         if not IMAGE.fullmatch(name) or not path.is_file():
             raise web.HTTPNotFound()
+        if self.debug_diagnostics:
+            from .diagnostics import logger as debug_logger
+
+            correlation = request.headers.get("X-ProxyStick-Debug", "")
+            requested = request.headers.get("Range", "")
+            if re.fullmatch(r"[0-9a-f]{8}:[0-9]{1,10}", correlation) and re.fullmatch(
+                r"bytes=[0-9]{1,20}-[0-9]{1,20}", requested
+            ):
+                debug_logger.info("HTTP fetch=%s range=%s received by server", correlation, requested)
         headers = {
             "Content-Type": "application/octet-stream",
             "Content-Encoding": "identity",
@@ -281,12 +299,17 @@ class ProxyStick:
         return web.json_response(body, status=202, headers=NO_STORE)
 
     def routes(self) -> list[web.RouteDef]:
-        return [
+        routes = [
             web.get(f"{PREFIX}/current", self.get_current),
             web.get(f"{PREFIX}/images/{{name}}", self.get_image),
             web.get(f"{PREFIX}/events", self.get_events),
             web.post(f"{PREFIX}/refresh", self.post_refresh),
         ]
+        if self.debug_diagnostics:
+            from .diagnostics import receive
+
+            routes.append(web.post(f"{PREFIX}/debug", receive))
+        return routes
 
     def application(self) -> web.Application:
         app = web.Application(middlewares=[self._authorise])

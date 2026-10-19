@@ -15,6 +15,8 @@
 
 #include "common.h"
 #include "http.h"
+#include "diagnostics.h"
+#include "psram_test.h"
 
 namespace esphome::proxy_stick {
 namespace {
@@ -149,7 +151,7 @@ void fetch_worker(void *) {
     const std::string url = current ? cache_image_url : std::string{};
     xSemaphoreGive(cache_mutex);
 
-    const bool ok = current && fetch_image_range(url, job.start, prefetch_cache.get(), job.size);
+    const bool ok = current && fetch_image_range(url, job.start, prefetch_cache.get(), job.size, job.speculative);
 
     xSemaphoreTake(cache_mutex, portMAX_DELAY);
     fetch_worker_busy = false;
@@ -245,6 +247,10 @@ bool read_prefetched_chunk(uint64_t start, void *buffer, uint32_t size) {
 
 bool setup_cache(uint32_t read_block_size) {
   block_size = read_block_size;
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  ESP_LOGW(TAG, "ONE-OFF PSRAM image test: streaming cache and prefetch disabled");
+  return true;
+#endif
   image_cache.reset(new (std::nothrow) uint8_t[block_size]);
   prefetch_cache.reset(new (std::nothrow) uint8_t[block_size]);
   if (image_cache == nullptr) {
@@ -271,6 +277,9 @@ void configure_cache(const std::string &url, uint64_t disk_size) { reset(url, di
 void invalidate_cache() { reset("", 0); }
 
 bool read_image_range(uint64_t start, void *buffer, uint32_t size) {
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  return read_psram_image(start, buffer, size);
+#endif
   if (!prefetch_on.load())
     return read_image_range_sync(start, buffer, size);
   auto *output = static_cast<uint8_t *>(buffer);
@@ -288,6 +297,10 @@ bool read_image_range(uint64_t start, void *buffer, uint32_t size) {
 }
 
 bool resize_read_buffers(uint32_t size) {
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  ESP_LOGW(TAG, "Read-buffer resizing is unavailable in the one-off PSRAM image test");
+  return false;
+#endif
   std::unique_ptr<uint8_t[]> primary(new (std::nothrow) uint8_t[size]);
   if (primary == nullptr)
     return false;

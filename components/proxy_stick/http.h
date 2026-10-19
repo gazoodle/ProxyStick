@@ -17,7 +17,7 @@ void set_authorization(const std::string &token);
 // Adds the headers every request carries.
 void add_common_headers(esp_http_client_handle_t client);
 
-bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uint32_t size);
+bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uint32_t size, bool speculative = false);
 bool fetch_manifest(const std::string &endpoint, Manifest &manifest);
 bool validate_image(const Manifest &manifest);
 

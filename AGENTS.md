@@ -50,5 +50,9 @@ over the air. Nothing is pushed to GitHub.
 - The snapshot branch is built from the working tree, uncommitted edits included, by
   `git daemon --access-hook` at each fetch. Never poll for changes. Why: core "Push, never
   poll"; the fetch itself is the event.
+- While `tools/dev` is running, it checks its local device YAML and `example/proxystick.yaml`
+  every 2 s and atomically rewrites the generated box configs when either changes. Why: the
+  owner explicitly approved this small poll on 2026-10-17 so a config edit does not require
+  restarting the image server and making connected frames fetch their images again.
 - Containerised development is a fine option for others, but not the owner's setup. Don't
   propose it as a replacement.

@@ -5,6 +5,7 @@
 #include "esphome/core/helpers.h"
 
 #include "../proxy_stick.h"
+#include "../usb.h"
 
 namespace esphome::proxy_stick {
 
@@ -23,5 +24,21 @@ class UsbSwitch final : public switch_::Switch, public Component, public Parente
     this->publish_state(this->parent_->enabled());
   }
 };
+
+#ifdef USE_PROXY_STICK_DEBUG
+class UsbReadDelaySwitch final : public switch_::Switch, public Component {
+ public:
+  void setup() override {
+    set_usb_read_delay(false);
+    this->publish_state(false);
+  }
+
+ protected:
+  void write_state(bool state) override {
+    set_usb_read_delay(state);
+    this->publish_state(state);
+  }
+};
+#endif
 
 }  // namespace esphome::proxy_stick

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "proxystick"
-version = "0.3.0"
+version = "0.5.0"
 description = "Serve a folder as a FAT32 image to a ProxyStick: an ESP32-S3 that is a USB stick over WiFi."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ proxystick = "proxystick.console:main"
 
 [project.optional-dependencies]
 # fake-git-host (the dev loop's git daemon) is the owner's own repo, not on PyPI: tools/setup installs it.
-dev = ["pytest>=9,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.15,<0.17", "pyright>=1.1,<2", "esphome>=2025.10"]
+dev = ["pytest>=9,<10", "pytest-asyncio>=1.2,<2", "ruff>=0.15,<0.17", "pyright>=1.1,<2", "esphome>=2025.10", "pyserial>=3.5,<4"]
 
 [project.urls]
 Homepage = "https://github.com/gazoodle/ProxyStick"

@@ -16,9 +16,11 @@
 #include "tusb.h"
 
 #include "cache.h"
+#include "diagnostics.h"
 #include "http.h"
 #include "trace.h"
 #include "usb.h"
+#include "psram_test.h"
 
 namespace esphome::proxy_stick {
 
@@ -38,6 +40,9 @@ void ProxyStick::set_token(const std::string &token) {
 }
 
 void ProxyStick::setup() {
+#ifdef USE_PROXY_STICK_DEBUG_SERIAL
+  diagnostics::begin(this->endpoint_);  // Capture USB startup before WiFi is available.
+#endif
   if (!setup_cache(this->read_block_size_ != 0 ? this->read_block_size_ : DEFAULT_READ_BLOCK_SIZE)) {
     this->mark_failed();
     return;
@@ -105,6 +110,9 @@ void ProxyStick::loop() {
   // The event stream starts once there is a network to start it on.
   if (!this->events_started_ && network::is_connected()) {
     this->events_started_ = true;
+#ifndef USE_PROXY_STICK_DEBUG_SERIAL
+    diagnostics::begin(this->endpoint_);
+#endif
     trace::milestone(trace::NETWORK_UP);
     if (!this->events_.start(this->endpoint_)) {
       ESP_LOGE(TAG, "Unable to start the event stream's task");
@@ -114,7 +122,10 @@ void ProxyStick::loop() {
   }
 
   // The lease: without a live event stream nothing may be served.
-  const bool connected = network::is_connected() && this->events_.connected();
+  bool connected = network::is_connected() && this->events_.connected();
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  connected = connected || psram_image_ready();  // This fixed RAM snapshot outlives its server lease.
+#endif
   if (!connected)
     this->remove_media_("the image service is unavailable");
   if (read_failed.exchange(false)) {
@@ -139,7 +150,11 @@ void ProxyStick::loop() {
     this->finish_medium_change_();
   trace::dump_step();
 
-  this->set_healthy_(connected && !this->discovery_failed_ && this->has_latest_);
+  bool healthy = connected && !this->discovery_failed_ && this->has_latest_;
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  healthy = psram_image_ready() && this->has_latest_;
+#endif
+  this->set_healthy_(healthy);
 #ifdef USE_BINARY_SENSOR
   if (this->usb_host_sensor_ != nullptr)
     this->usb_host_sensor_->publish_state(this->usb_host_configured());
@@ -315,7 +330,9 @@ void ProxyStick::burn_scheduled_usb_phy_fuse_() {
 }
 
 void ProxyStick::dump_trace() {
-#ifdef USE_PROXY_STICK_TRACE
+#ifdef USE_PROXY_STICK_MINIMAL_USB
+  ESP_LOGW(TAG, "USB trace is disabled by debug_minimal_usb; disable that test to record traces again");
+#elif defined(USE_PROXY_STICK_TRACE)
   trace::start_dump();
 #else
   ESP_LOGW(TAG, "No USB trace: set usb_trace: true under proxy_stick: to record one");
@@ -397,6 +414,9 @@ void ProxyStick::update() {
 }
 
 void ProxyStick::dump_config() {
+#ifdef USE_PROXY_STICK_MINIMAL_USB
+  ESP_LOGCONFIG(TAG, "MINIMAL USB TEST: verified PSRAM reads; no USB statistics, trace, back-channel or media-change notifications");
+#endif
   ESP_LOGCONFIG(TAG,
                 "ProxyStick %s:\n  Endpoint: %s\n  Token: %s\n  Sector size: 512\n  Read block: %" PRIu32
                 " bytes\n  Background prefetch: %s\n  USB handover gap: %" PRIu32 " ms\n  Read only: yes",

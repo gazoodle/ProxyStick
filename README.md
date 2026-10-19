@@ -90,9 +90,11 @@ proxy_stick:
 Flash it once over USB, then plug the stick into the frame. Later updates go over the air.
 
 [example/proxystick.yaml](example/proxystick.yaml) is a whole device config with every option:
-a token, the read-ahead block size, the USB manufacturer and product strings, a switch to turn
-the drive off, buttons to replug it and clear its statistics, and the diagnostic sensors
-(bytes served, throughput, HTTP timings, read-ahead hits).
+a token, the read-ahead block size, the USB manufacturer and product strings, switches to turn
+the drive off and add a diagnostic 25 ms USB read delay, buttons to replug it and clear its
+statistics, and the diagnostic sensors (bytes served, throughput, HTTP timings, read-ahead hits).
+
+Temporary USB timing diagnostics and the 25 ms delay probe are described in [docs/DEBUG.md](docs/DEBUG.md).
 
 ### Hosting the server
 

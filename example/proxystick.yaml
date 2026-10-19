@@ -38,12 +38,16 @@ proxy_stick:
   manufacturer: ProxyStick         # optional; what the host is told
   product: ProxyStick
   update_interval: 5s              # how often the sensors below are published
-  usb_trace: false                 # set true temporarily to record USB negotiation across power loss
+  # usb_trace defaults to false; set true in the device config to retain traces across power loss.
+  debug_diagnostics: true          # temporary RAM back-channel + 25 ms probe; compile out when finished
 
 switch:
   - platform: proxy_stick
     usb:
       name: USB drive
+    # Diagnostic: add 25 ms after every successful TinyUSB read callback. Always off after restart.
+    usb_read_delay:
+      name: USB read delay (25 ms)
     # For frames that power-cycle the stick at every insert. These three (with the button and binary sensor
     # below) start disabled in Home Assistant; arming, then pressing, burns an irreversible eFuse at restart.
     usb_phy_fuse_armed:

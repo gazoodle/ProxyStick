@@ -1,5 +1,6 @@
 #include "usb.h"
 
+#ifndef USE_PROXY_STICK_MINIMAL_USB
 #include <algorithm>
 #include <array>
 #include <cinttypes>
@@ -12,6 +13,7 @@
 
 #include "cache.h"
 #include "common.h"
+#include "diagnostics.h"
 #include "trace.h"
 
 namespace esphome::proxy_stick {
@@ -38,6 +40,9 @@ uint64_t read_session_source_us{0};
 uint64_t read_session_usb_us{0};
 std::atomic_bool media_change_pending{false};
 std::atomic_bool read_active{false};
+#ifdef USE_PROXY_STICK_DEBUG
+std::atomic_bool read_delay_enabled{false};
+#endif
 
 constexpr uint32_t HOT_PAGE_BYTES = 4096;
 constexpr size_t HOT_PAGE_COUNT = 64;
@@ -176,17 +181,29 @@ void set_inquiry(const char *vendor, const char *product, const char *revision) 
 void usb_event(tinyusb_event_t *event, void *) {
   static const char *const NAMES[] = {"attached (configured)", "detached", "suspended", "resumed"};
   const unsigned id = event->id;
+  diagnostics::record(diagnostics::BUS, 0, 0, id);
   ESP_LOGI(TAG, "USB bus %s", id < 4 ? NAMES[id] : "event");
   trace::record(trace::BUS, id, nullptr, 0, true);
-  if (event->id == TINYUSB_EVENT_DETACHED) {
-    read_command = {};
-    read_active.store(false, std::memory_order_relaxed);
-  }
+  if (event->id == TINYUSB_EVENT_DETACHED)
+    abort_usb_read();
+}
+
+void abort_usb_read() {
+  diagnostics::command_complete(true);
+  read_command = {};
+  read_active.store(false, std::memory_order_relaxed);
 }
 
 void notify_media_changed() { media_change_pending.store(true, std::memory_order_relaxed); }
 
 bool usb_read_in_progress() { return read_active.load(std::memory_order_relaxed); }
+
+#ifdef USE_PROXY_STICK_DEBUG
+void set_usb_read_delay(bool enabled) {
+  read_delay_enabled.store(enabled, std::memory_order_relaxed);
+  diagnostics::record(diagnostics::DELAY_STATE, 0, 0, enabled);
+}
+#endif
 
 void dump_hot_blocks() {
   std::array<HotPage, HOT_PAGE_COUNT> pages;
@@ -271,7 +288,10 @@ bool tud_msc_is_writable_cb(uint8_t) {
 }
 
 int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buffer, uint32_t size) {
+  const uint64_t position = static_cast<uint64_t>(lba) * SECTOR_SIZE + offset;
+  diagnostics::activity();
   if (report_media_change(lun)) {
+    diagnostics::record(diagnostics::READ_FAILED, position, size);
     if (read_command.active)
       read_command.failed = true;
     else
@@ -279,6 +299,7 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
     return -1;
   }
   if (!read_command.active) {
+    diagnostics::command_begin(position);
     const uint32_t epoch = stats.epoch.load(std::memory_order_relaxed);
     if (read_session_epoch != epoch) {
       read_session_epoch = epoch;
@@ -294,6 +315,11 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
   const uint32_t source_started_us = esphome::micros();
   const int32_t read = read_blocks(lba, offset, buffer, size);
   read_command.source_us += esphome::micros() - source_started_us;
+#ifdef USE_PROXY_STICK_DEBUG
+  const uint32_t debug_source_us = esphome::micros() - source_started_us;
+  const bool delayed = read >= 0 && read_delay_enabled.load(std::memory_order_relaxed);
+  diagnostics::command_buffer(position, size, debug_source_us, read >= 0, delayed);
+#endif
   if (read < 0) {
     read_command.failed = true;
     if (media_present.load())
@@ -302,11 +328,17 @@ int32_t tud_msc_read10_cb(uint8_t lun, uint32_t lba, uint32_t offset, void *buff
       tud_msc_set_sense(lun, SCSI_SENSE_NOT_READY, 0x3A, 0x00);  // Medium not present.
   } else {
     read_command.bytes += read;
+#ifdef USE_PROXY_STICK_DEBUG
+    if (delayed) {
+      esphome::delay(25);  // Expose hosts that mishandle a slow but successful MSC transfer.
+    }
+#endif
   }
   return read;
 }
 
 void tud_msc_read10_complete_cb(uint8_t) {
+  diagnostics::command_complete();
   finish_read_command();
   read_command = {};
   read_active.store(false, std::memory_order_relaxed);
@@ -327,3 +359,4 @@ int32_t tud_msc_scsi_cb(uint8_t lun, uint8_t const scsi_cmd[16], void *, uint16_
 }
 
 }  // extern "C"
+#endif  // !USE_PROXY_STICK_MINIMAL_USB

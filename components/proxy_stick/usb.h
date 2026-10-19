@@ -5,6 +5,7 @@
 // --allow-multiple-definition. When HID arrives, the USB descriptors and callbacks stay in this one file.
 
 #include "tinyusb.h"
+#include "esphome/core/defines.h"
 
 namespace esphome::proxy_stick {
 
@@ -15,6 +16,12 @@ void usb_event(tinyusb_event_t *event, void *arg);
 // Keeps the USB device attached while telling the host that its removable medium changed.
 void notify_media_changed();
 bool usb_read_in_progress();
+// Drop inferred read tracking when the USB transport abandons a command.
+void abort_usb_read();
+// Diagnostic only: delay each successful TinyUSB read callback by 25 ms.
+#ifdef USE_PROXY_STICK_DEBUG
+void set_usb_read_delay(bool enabled);
+#endif
 // Logs the most frequently requested 4 KiB image pages since statistics were cleared.
 void dump_hot_blocks();
 

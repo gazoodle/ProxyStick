@@ -8,6 +8,8 @@
 #include "esphome/components/json/json_util.h"
 #include "esphome/core/hal.h"
 #include "esphome/core/log.h"
+#include "diagnostics.h"
+#include "psram_test.h"
 
 namespace esphome::proxy_stick {
 namespace {
@@ -114,12 +116,14 @@ int perform(const std::string &url, const char *range, Response &response) {
   return 0;
 }
 
+#ifndef USE_PROXY_STICK_PSRAM_TEST
 bool read_range(const std::string &url, uint64_t start, void *buffer, uint32_t size) {
   char range[48];
   format_range(range, start, size);
   Response response{static_cast<uint8_t *>(buffer), size};
   return perform(url, range, response) == 206 && response.received == size;
 }
+#endif
 
 std::string absolute_url(const std::string &endpoint, const std::string &url) {
   if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0)
@@ -143,7 +147,7 @@ void add_common_headers(esp_http_client_handle_t client) {
     esp_http_client_set_header(client, "Authorization", authorization.c_str());
 }
 
-bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uint32_t size) {
+bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uint32_t size, bool speculative) {
   char range[48];
   format_range(range, start, size);
   for (uint8_t attempt = 0; attempt < 2; attempt++) {
@@ -161,10 +165,16 @@ bool fetch_image_range(const std::string &url, uint64_t start, void *buffer, uin
     esp_http_client_set_header(image_client, "Range", range);
     const uint32_t statistics_epoch = stats.epoch.load(std::memory_order_relaxed);
     response.started_us = micros();
+    const uint32_t debug_fetch = diagnostics::fetch_begin(start, size);
+#ifdef USE_PROXY_STICK_DEBUG
+    const std::string debug_id = diagnostics::correlation(debug_fetch);
+    esp_http_client_set_header(image_client, "X-ProxyStick-Debug", debug_id.c_str());
+#endif
     const esp_err_t error = esp_http_client_perform(image_client);
     const uint32_t elapsed = micros() - response.started_us;
     const bool success = error == ESP_OK && esp_http_client_get_status_code(image_client) == 206 &&
                          response.received == size;
+    diagnostics::fetch_end(debug_fetch, start, size, success, elapsed, speculative);
     if (stats.epoch.load(std::memory_order_relaxed) == statistics_epoch) {
       stats.http_request_count.fetch_add(1, std::memory_order_relaxed);
       stats.http_request_time_us.fetch_add(elapsed, std::memory_order_relaxed);
@@ -216,11 +226,15 @@ bool fetch_manifest(const std::string &endpoint, Manifest &manifest) {
 }
 
 bool validate_image(const Manifest &manifest) {
+#ifdef USE_PROXY_STICK_PSRAM_TEST
+  return prepare_psram_image(manifest);
+#else
   std::array<uint8_t, SECTOR_SIZE> boot{};
   if (read_range(manifest.image_url, 0, boot.data(), boot.size()) && boot[510] == 0x55 && boot[511] == 0xAA)
     return true;
   ESP_LOGW(TAG, "Revision %" PRIu32 ": its boot sector could not be read or is not a disk's", manifest.revision);
   return false;
+#endif
 }
 
 }  // namespace esphome::proxy_stick

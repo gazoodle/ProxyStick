@@ -1,0 +1,35 @@
+# M5Stack Atom Lite: first install over USB; subsequent updates can use WiFi OTA.
+# Grove RED +5V MUST be disconnected: collector is Mac-powered, target is frame-powered.
+# Black=common GND; yellow=Atom Lite GPIO26 RX, from target GPIO2 TX; white unused.
+esphome:
+  name: proxystick-monitor
+  friendly_name: ProxyStick Serial Monitor
+
+esp32:
+  variant: esp32
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [serial_monitor]
+
+logger:
+  hardware_uart: UART0
+  baud_rate: 1500000  # Verified Mac USB-console rate; Grove input remains 1500000 too.
+  level: INFO
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  reboot_timeout: 0s  # Serial capture must survive an unavailable access point.
+  power_save_mode: none
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+serial_monitor:
