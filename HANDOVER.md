@@ -1,8 +1,72 @@
 # Handover
 
-Last updated: 2026-10-19. **Owner stopped the investigation. Do not resume without an explicit request.**
+Last updated: 2026-11-12. Corruption investigation **resumed at the owner's explicit request**
+(2026-11-12) and progressed; no fix yet. The owner has **closed the frame-reflashing path** — do
+not pursue rooting or flashing the frame. Firmware builds belong on the owner's HA box, not the
+agent's machine. Keep version 0.5.0 unreleased. No code changed this session; docs only.
 
-## Stopped: unresolved corruption and unusable latest serial capture
+## Corruption: what the 2026-11-12 session established
+
+Method: the S3R (8 MB PSRAM) served a SHA-256-verified RAM image; photos were watched on the strict
+frame through the Study Cam, using test cards of known byte size and pixel dimensions.
+
+- **Not a fetch/stall artefact, and not an S3U-only fault.** The S3R serves from the verified PSRAM
+  image with no network reads, never stalls, and every USB command reports success — yet the strict
+  frame still shows damaged photos. The cause is downstream of the stick's data path: the USB link
+  or the frame.
+- **Damage probability tracks file size, not pixel dimensions.** Cards up to ~400 KB were mostly
+  clean; from ~480 KB up they were reliably damaged, at a different place each cycle. Signature: a
+  correct top strip, then a flat colour (green/cyan) fill to the bottom.
+- **"Decoder outruns the stick" is disproved.** Large-dimension cards (slow to decode) failed as
+  early and as often as small-dimension cards of the same byte size. On a Linux host a file read
+  blocks until the data arrives, so the decoder cannot race ahead regardless.
+- **A USB 2.0 hub between the frame and the S3R did not fix it.** A hub revalidates every packet
+  from the full-speed stick, which argues against the frame's port simply accepting electrically
+  corrupt packets — but it does not clear the frame's host driver (below).
+- **The frame almost certainly runs Android 5 (Linux ~2013) on an old Rockchip RK3126C or Allwinner
+  A20** (web search of Nixplay teardown/rooting projects; no report of this exact symptom exists).
+  The giant single READ(10)s (up to ~510 KB, non-page-aligned, ending at EOF) are kernel read-ahead;
+  such old vendor USB host stacks are known-poor with full-speed devices, and "correct top then flat
+  fill" matches a read that returned short/early and left the decoder without the tail.
+
+Still established from before: the strict frame corrupts; the Mac and the tolerant frame do not; a
+conventional stick with the same image displays cleanly on the strict frame; a 25 ms injected read
+delay worsens corruption. Mac read-only reads of the stick's files (sequential/shuffled 4/8/64 KiB,
+unaligned 513-byte, five passes) matched the image — but macOS never issues reads as large as the
+frame's, so this did not exercise the suspect path.
+
+**Current odds (judgement, not measured): roughly even** between (a) the stick sending wrong bytes
+during very long reads — a firmware bug, fixable — and (b) the frame's old host driver mishandling
+long, slowly-arriving full-speed reads — not fixable in this stick, only mitigable by keeping photos
+small, and even ~300 KB cards failed about 1 in 4.
+
+**Separate, real, and fixable:** the S3U's debug build is memory-starved (free heap 33–40 KB), drops
+~25% of incoming WiFi bytes, and the frame then times out its ~5.5 s reads with a bus reset. The S3R
+(~196 KB free heap) fetched at 1.04 MB/s from the same position. Fixing the S3U's memory will not
+cure the corruption: the S3R corrupts with no stalls at all.
+
+## Next step not yet taken
+
+Read the S3R on a **real Linux host (the KNX Pi, `ssh rpi-knx`)** rather than the Mac: raise that one
+disk's read size/read-ahead (`sudo`; the settings vanish on unplug), capture `usbmon`, and compare
+bytes against the image under reads as large as the frame's.
+
+- Linux gets bad bytes → stick firmware bug.
+- Linux is always correct even at the frame's read sizes → the frame's driver.
+
+Do not mount the drive, install anything, or touch the KNX services. The S3R needs WiFi to this
+Mac's image server. Caveat: a Pi 4's modern USB controller tests "does the stick send right bytes",
+not "does it survive a bad host driver"; the latter needs the frame itself or an old USB 1.1 host.
+
+State on shelving (2026-11-12): a dev image server was left running on port 8767 serving the test
+cards; the S3R was in the frame; the S3U was unplugged. Scratch scripts and captures are in the
+agent's scratchpad, not the repo.
+
+The 2026-10-19 stop note and serial-instrumentation chase below are **historical and superseded**:
+that path never produced a usable capture, and the S3R PSRAM result makes the serial collector
+unnecessary for the questions above.
+
+## Historical (superseded 2026-11-12): 2026-10-19 stop and serial-instrumentation chase
 
 Codex failed to track the problem to a demonstrated cause. Too much time went into expanding
 instrumentation and troubleshooting the instrumentation itself, with prolonged silent work and

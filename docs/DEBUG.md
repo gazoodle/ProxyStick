@@ -1,5 +1,13 @@
 # Temporary device diagnostics
 
+> **2026-11-12 update — read `HANDOVER.md` first.** The corruption investigation resumed and
+> narrowed the cause to the USB link or the frame (the S3R corrupts from a verified PSRAM image
+> with no stalls and all-success commands; damage tracks file size, not pixel dimensions; a USB
+> 2.0 hub did not help). The serial-capture stage below never produced a usable trace and is now
+> **superseded** — the next step is reading the stick on a real Linux host (`usbmon` + large reads),
+> not the serial collector. The mechanisms documented here (back-channel, PSRAM/minimal-USB tests)
+> remain valid if needed.
+
 ## Full TinyUSB serial capture (2026-10-19)
 
 **Current correction:** the 3000000-baud USB session produced no valid records, including
